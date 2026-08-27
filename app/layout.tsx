@@ -68,6 +68,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <nav aria-label="Primary navigation" className="flex items-center gap-1 font-mono text-[13px] text-fade sm:gap-2">
               <Link href="/docs/" className="inline-flex min-h-11 items-center px-2 transition-colors hover:text-accent sm:px-3">docs</Link>
               <Link href="/registry/" className="inline-flex min-h-11 items-center px-2 transition-colors hover:text-accent sm:px-3">registry</Link>
+              <Link href="/account/" className="inline-flex min-h-11 items-center px-2 transition-colors hover:text-accent sm:px-3">account</Link>
               <a
                 target="_blank"
                 rel="noreferrer"

@@ -82,6 +82,13 @@ export async function ready() {
         UNIQUE (package_id, version, arch)
       )`;
     await s`
+      CREATE TABLE IF NOT EXISTS sessions (
+        id         text PRIMARY KEY,
+        user_id    int NOT NULL REFERENCES users(id),
+        expires_at timestamptz NOT NULL,
+        created_at timestamptz NOT NULL DEFAULT now()
+      )`;
+    await s`
       CREATE TABLE IF NOT EXISTS events (
         id    bigserial PRIMARY KEY,
         kind  text NOT NULL,
