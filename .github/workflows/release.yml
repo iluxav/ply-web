@@ -42,10 +42,12 @@ jobs:
 
       - name: build image
         id: img
-        uses: iluxav/ply@v1
-        with:
-          dir: "ply/app"
-          upload: "false"
+        run: |
+          curl -fsSL https://i.plybox.sh/install.sh | PLY_WIZARD=no sh
+          cd ply/app
+          ply build .
+          img=$(ls plybox-web-*-linux-*.img | head -1)
+          echo "image=ply/app/$img" >> "$GITHUB_OUTPUT"
 
       - name: attach to the release
         env:
