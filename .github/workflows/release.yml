@@ -19,29 +19,23 @@ jobs:
   release:
     runs-on: ubuntu-latest    # x64: matches the droplet
     steps:
-      - uses: actions/checkout@v4
-        with: { path: app }
+      # the exact layout local dev has: ply checked out, this repo AS its
+      # app/ dir — ../docs, ../install.sh, ../scripts, ../skills all real
       - uses: actions/checkout@v4
         with: { repository: iluxav/ply, path: ply }
+      - uses: actions/checkout@v4
+        with: { path: ply/app }
       - uses: actions/setup-node@v4
         with: { node-version: "24" }
 
       - name: version guard (tag == ply.toml)
-        working-directory: app
+        working-directory: ply/app
         run: |
           V=$(sed -n 's/^version = "\(.*\)"/\1/p' ply.toml | head -1)
           test "v$V" = "$GITHUB_REF_NAME" || { echo "::error::tag $GITHUB_REF_NAME != ply.toml v$V"; exit 1; }
 
-      - name: stitch the monorepo shape the build expects
-        run: |
-          # sync-content reads ../docs, ../install.sh, ../scripts, ../skills
-          ln -s "$PWD/ply/docs" docs || cp -r ply/docs docs
-          cp ply/install.sh install.sh
-          ln -s "$PWD/ply/scripts" scripts
-          ln -s "$PWD/ply/skills" skills
-
       - name: build site
-        working-directory: app
+        working-directory: ply/app
         run: |
           npm ci
           npm run build
@@ -50,7 +44,7 @@ jobs:
         id: img
         uses: iluxav/ply@v1
         with:
-          dir: "app"
+          dir: "ply/app"
           upload: "false"
 
       - name: attach to the release
