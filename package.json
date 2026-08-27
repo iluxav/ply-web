@@ -13,10 +13,12 @@
     "postbuild": "rm -rf .next/standalone/.next/static .next/standalone/public .next/standalone/.content && cp -r .next/static .next/standalone/.next/static && cp -r public .next/standalone/public && cp -r .content .next/standalone/.content"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1119.0",
     "gray-matter": "^4.0.3",
     "highlight.js": "^11.12.0",
     "marked": "^18.0.10",
     "next": "16.3.2",
+    "postgres": "^3.4.9",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
