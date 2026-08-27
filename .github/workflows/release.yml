@@ -1,0 +1,63 @@
+# ply-web — build plybox.sh (site + docs) and release the image.
+# The prod host runs a `plybox-web` deployment (github = "iluxav/ply-web")
+# with the reconcile timer — it pulls each release itself within a minute.
+# Docs, install.sh and the agent skill live in the ply repo (beside the
+# code they document) and are checked out alongside at build time.
+name: release
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest    # x64: matches the droplet
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: app }
+      - uses: actions/checkout@v4
+        with: { repository: iluxav/ply, path: ply }
+      - uses: actions/setup-node@v4
+        with: { node-version: "24" }
+
+      - name: version guard (tag == ply.toml)
+        working-directory: app
+        run: |
+          V=$(sed -n 's/^version = "\(.*\)"/\1/p' ply.toml | head -1)
+          test "v$V" = "$GITHUB_REF_NAME" || { echo "::error::tag $GITHUB_REF_NAME != ply.toml v$V"; exit 1; }
+
+      - name: stitch the monorepo shape the build expects
+        run: |
+          # sync-content reads ../docs, ../install.sh, ../scripts, ../skills
+          ln -s "$PWD/ply/docs" docs || cp -r ply/docs docs
+          cp ply/install.sh install.sh
+          ln -s "$PWD/ply/scripts" scripts
+          ln -s "$PWD/ply/skills" skills
+
+      - name: build site
+        working-directory: app
+        run: |
+          npm ci
+          npm run build
+
+      - name: build image
+        id: img
+        uses: iluxav/ply@v1
+        with:
+          dir: "app"
+          upload: "false"
+
+      - name: attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "${{ steps.img.outputs.image }}" \
+            --title "plybox.sh $GITHUB_REF_NAME" \
+            --notes "site image — prod pulls this on its next reconcile beat" || \
+          gh release upload "$GITHUB_REF_NAME" "${{ steps.img.outputs.image }}"
