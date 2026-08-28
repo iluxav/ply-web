@@ -6,7 +6,9 @@ import {
   archOf,
   alpineLinks,
   depLine,
+  findPackage,
   fmtSize,
+  pkgHref,
   type RegistryPackage,
 } from "@/lib/registry";
 import { CopyButton } from "@/components/CopyButton";
@@ -30,15 +32,15 @@ function packageSummary(pkg: RegistryPackage) {
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ name: string }>;
+  params: Promise<{ slug: string[] }>;
 }): Promise<Metadata> {
-  const { name } = await params;
-  const p = (await registryState()).packages.find((x) => x.name === name);
+  const { slug } = await params;
+  const p = findPackage(await registryState(), slug);
   return p
     ? pageMetadata({
         title: `${p.name} package`,
         description: packageSummary(p),
-        path: `/registry/${encodeURIComponent(p.name)}/`,
+        path: pkgHref(p.namespace, p.name),
       })
     : {};
 }
@@ -46,18 +48,18 @@ export async function generateMetadata({
 export default async function PackagePage({
   params,
 }: {
-  params: Promise<{ name: string }>;
+  params: Promise<{ slug: string[] }>;
 }) {
-  const { name } = await params;
+  const { slug } = await params;
   const state = await registryState();
-  const p = state.packages.find((x) => x.name === name);
+  const p = findPackage(state, slug);
   if (!p) notFound();
 
   const latest = p.versions[p.versions.length - 1];
   const range = latest.version.split(".").slice(0, 2).join(".");
   const dependency = depLine(p, range);
   const description = packageSummary(p);
-  const packageUrl = absoluteUrl(`/registry/${encodeURIComponent(p.name)}/`);
+  const packageUrl = absoluteUrl(pkgHref(p.namespace, p.name));
   const latestBuilds = p.versions.filter(
     (version) => version.version === latest.version,
   );

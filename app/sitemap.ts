@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 import { allDocs } from "@/lib/docs";
-import { registryState } from "@/lib/registry";
+import { pkgHref, registryState } from "@/lib/registry";
 import { SITE_URL } from "@/lib/site";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
@@ -27,7 +27,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.9,
     },
     ...state.packages.map((pkg) => ({
-      url: `${SITE_URL}/registry/${encodeURIComponent(pkg.name)}/`,
+      url: `${SITE_URL}${pkgHref(pkg.namespace, pkg.name)}`,
       lastModified: pkg.versions.at(-1)?.pushed_at || registryUpdated,
       changeFrequency: "weekly" as const,
       priority: 0.7,

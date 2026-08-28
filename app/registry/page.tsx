@@ -24,6 +24,7 @@ const DEFAULT_SOURCE = 'default = "https://registry.plybox.sh/ply/{package}"';
 type RegistrySearchParams = {
   page?: string | string[];
   q?: string | string[];
+  f?: string | string[];
 };
 
 type RegistryPageProps = {
@@ -43,9 +44,34 @@ function searchQuery(params: RegistrySearchParams) {
   return (first(params.q) ?? "").trim().slice(0, 120);
 }
 
-function registryUrl(page: number, query = "") {
+// Filters cut by the metadata every package carries: its type, and
+// whether it lives outside the curated ply/apps namespaces.
+const FILTERS = ["all", "apps", "layers", "stacks", "community"] as const;
+type Filter = (typeof FILTERS)[number];
+
+function filterOf(params: RegistrySearchParams): Filter {
+  const value = first(params.f) ?? "all";
+  return (FILTERS as readonly string[]).includes(value) ? (value as Filter) : "all";
+}
+
+const typeOf = (pkg: RegistryPackage) => pkg.type ?? "layer";
+const isCommunity = (pkg: RegistryPackage) =>
+  pkg.namespace !== "ply" && pkg.namespace !== "apps";
+
+function matchesFilter(pkg: RegistryPackage, filter: Filter) {
+  switch (filter) {
+    case "apps": return typeOf(pkg) === "app";
+    case "layers": return typeOf(pkg) === "layer";
+    case "stacks": return typeOf(pkg) === "stack";
+    case "community": return isCommunity(pkg);
+    default: return true;
+  }
+}
+
+function registryUrl(page: number, query = "", filter: Filter = "all") {
   const params = new URLSearchParams();
   if (query) params.set("q", query);
+  if (filter !== "all") params.set("f", filter);
   if (page > 1) params.set("page", String(page));
   const suffix = params.toString();
   return suffix ? `/registry/?${suffix}` : "/registry/";
@@ -78,6 +104,8 @@ function packageRow(pkg: RegistryPackage): RegistryRow {
   return {
     name: pkg.name,
     namespace: pkg.namespace,
+    type: typeOf(pkg),
+    community: isCommunity(pkg),
     description: pkg.description,
     license: pkg.license,
     version: latest.version,
@@ -120,9 +148,12 @@ async function RegistryCatalog({
   const params = await searchParams;
   const page = requestedPage(params);
   const query = searchQuery(params);
-  const packages = state.packages.filter(
+  const filter = filterOf(params);
+  const searched = state.packages.filter(
     (pkg) => pkg.versions.length > 0 && matchesSearch(pkg, query),
   );
+  const countOf = (f: Filter) => searched.filter((pkg) => matchesFilter(pkg, f)).length;
+  const packages = searched.filter((pkg) => matchesFilter(pkg, filter));
   const pageCount = Math.max(1, Math.ceil(packages.length / PAGE_SIZE));
 
   if (page > pageCount) notFound();
@@ -135,6 +166,7 @@ async function RegistryCatalog({
     <section className="mt-12" aria-labelledby="package-index-title">
       <div className="flex flex-wrap items-end justify-between gap-5">
         <form action="/registry/" method="get" role="search" className="w-full max-w-xl">
+          {filter !== "all" && <input type="hidden" name="f" value={filter} />}
           <label htmlFor="package-search" className="mb-2 block font-mono text-[10px] uppercase tracking-wider text-fade">
             Search every package
           </label>
@@ -157,15 +189,33 @@ async function RegistryCatalog({
           </div>
         </form>
 
+        <nav aria-label="Package filters" className="flex flex-wrap items-center gap-1 pb-1 font-mono text-[11px]">
+          {FILTERS.map((f) => (
+            <Link
+              key={f}
+              href={registryUrl(1, query, f)}
+              aria-current={f === filter ? "page" : undefined}
+              className={`inline-flex min-h-9 items-center border px-3 transition-colors ${
+                f === filter
+                  ? "border-accent text-accent"
+                  : "border-edge text-fade hover:border-deep hover:text-ink"
+              }`}
+            >
+              {f}
+              <span className="ml-1.5 opacity-60">{countOf(f)}</span>
+            </Link>
+          ))}
+        </nav>
+
         <div className="flex items-center gap-4 pb-1 font-mono text-[11px] text-fade">
           <p id="package-index-title">
             {packages.length === 0
               ? "0 packages"
               : `showing ${start + 1}–${end} of ${packages.length}`}
           </p>
-          {query && (
+          {(query || filter !== "all") && (
             <Link href="/registry/" className="text-accent hover:underline">
-              clear search
+              clear
             </Link>
           )}
         </div>
@@ -174,11 +224,11 @@ async function RegistryCatalog({
       {rows.length > 0 ? (
         <>
           <RegistryTable rows={rows} />
-          <RegistryPagination page={page} pageCount={pageCount} query={query} />
+          <RegistryPagination page={page} pageCount={pageCount} query={query} filter={filter} />
         </>
       ) : (
         <div className="mt-6 border-y border-edge py-12 text-center">
-          <p className="text-sm text-fade">No packages match “{query}”.</p>
+          <p className="text-sm text-fade">No {filter !== "all" ? filter + " " : ""}packages match{query ? ` “${query}”` : " the filter"}.</p>
           <Link href="/registry/" className="mt-3 inline-flex min-h-11 items-center font-mono text-xs text-accent hover:underline">
             clear search
           </Link>

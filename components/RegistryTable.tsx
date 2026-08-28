@@ -1,8 +1,11 @@
 import Link from "next/link";
+import { pkgHref } from "@/lib/registry";
 
 export type RegistryRow = {
   name: string;
   namespace: string;
+  type: string; // "app" | "layer" | "stack"
+  community: boolean;
   description: string;
   license: string;
   version: string;
@@ -10,11 +13,26 @@ export type RegistryRow = {
   size: string;
 };
 
+function TypeBadge({ row }: { row: RegistryRow }) {
+  return (
+    <span className="ml-2 inline-flex gap-1 align-[2px]">
+      <span className="border border-edge px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-fade">
+        {row.type}
+      </span>
+      {row.community && (
+        <span className="border border-deep px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-accent/80">
+          community
+        </span>
+      )}
+    </span>
+  );
+}
+
 function PackageIdentity({ row }: { row: RegistryRow }) {
   return (
     <div className="min-w-0">
       <Link
-        href={`/registry/${row.name}/`}
+        href={pkgHref(row.namespace, row.name)}
         className="font-mono text-sm text-ink transition-colors hover:text-accent"
       >
         {row.namespace !== "ply" && (
@@ -22,6 +40,7 @@ function PackageIdentity({ row }: { row: RegistryRow }) {
         )}
         {row.name}
       </Link>
+      <TypeBadge row={row} />
       <p className="mt-1 line-clamp-2 max-w-2xl text-sm leading-5 text-fade">
         {row.description || "No package description."}
       </p>

@@ -13,7 +13,7 @@ import { NextResponse } from "next/server";
 import { createHash } from "node:crypto";
 import { userForToken } from "@/lib/auth";
 import { ready } from "@/lib/db";
-import { putObject } from "@/lib/r2";
+import { getObject, putObject } from "@/lib/r2";
 
 
 const MAX_BYTES = 512 * 1024 * 1024;
@@ -111,12 +111,41 @@ export async function POST(req: Request) {
       bytes: Number(row.bytes), pushed_at: row.created_at,
     });
   }
+  const ownerPkgs = [...byName.values()];
   await putObject(
     `${owner}/state.json`,
-    JSON.stringify({ updated: new Date().toISOString(), packages: [...byName.values()] }, null, 1),
+    JSON.stringify({ updated: new Date().toISOString(), packages: ownerPkgs }, null, 1),
     "application/json",
     "public, max-age=60",
   );
+
+  // The root catalog (browse page, `ply search` default) carries every
+  // namespace. Each push replaces ONLY its own namespace's entries and
+  // preserves the rest — the git pipeline owns apps/ and ply/ the same
+  // way — serialized by an advisory lock so concurrent pushes can't
+  // lose each other's merge.
+  await sql.begin(async (tx) => {
+    await tx`SELECT pg_advisory_xact_lock(771600)`;
+    type Pkg = { namespace?: string; name?: string; versions?: { bytes?: number; version?: string }[] };
+    let root: { packages?: Pkg[] } = {};
+    try {
+      root = JSON.parse((await getObject("state.json")) ?? "{}");
+    } catch { /* first ever state: start empty */ }
+    const kept = (root.packages ?? []).filter((p) => p.namespace !== owner);
+    const packages = [...kept, ...(ownerPkgs as Pkg[])].sort((a, b) =>
+      a.namespace === b.namespace
+        ? (a.name ?? "").localeCompare(b.name ?? "")
+        : (a.namespace ?? "").localeCompare(b.namespace ?? ""));
+    const snapshot = {
+      ...root,
+      updated: new Date().toISOString().replace(/\.\d+Z$/, "Z"),
+      package_count: packages.length,
+      image_count: packages.reduce((n, p) => n + (p.versions?.length ?? 0), 0),
+      total_bytes: packages.reduce((n, p) => n + (p.versions ?? []).reduce((m, v) => m + (v.bytes ?? 0), 0), 0),
+      packages,
+    };
+    await putObject("state.json", JSON.stringify(snapshot, null, 1), "application/json", "public, max-age=300");
+  });
 
   return NextResponse.json({
     ok: true,

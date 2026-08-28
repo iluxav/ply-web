@@ -2,7 +2,7 @@
 // Reads stay static (registry.plybox.sh); only pushes come through here.
 // Credentials via env (the stack's env_file): R2_ACCOUNT_ID,
 // R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET (default the live one).
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 
 let client: S3Client | null | undefined;
 
@@ -35,4 +35,18 @@ export async function putObject(key: string, body: Buffer | string, contentType:
     ContentType: contentType,
     CacheControl: cacheControl,
   }));
+}
+
+// getObject reads back a catalog file for read-modify-write merges —
+// straight from the bucket, so CDN staleness can never lose an entry.
+export async function getObject(key: string): Promise<string | null> {
+  const c = r2();
+  if (!c) throw new Error("registry reads are not enabled (no R2 credentials)");
+  try {
+    const res = await c.send(new GetObjectCommand({ Bucket: BUCKET, Key: key }));
+    return (await res.Body?.transformToString()) ?? null;
+  } catch (e) {
+    if ((e as { name?: string }).name === "NoSuchKey") return null;
+    throw e;
+  }
 }

@@ -20,6 +20,8 @@ export type AlpineProvenance = {
 
 export type RegistryPackage = {
   namespace: string;
+  owner?: string;
+  type?: string; // "app" | "layer" | "stack"; missing = layer (pre-v2 metadata)
   name: string;
   description: string;
   license: string;
@@ -55,6 +57,24 @@ export async function registryState(): Promise<RegistryState> {
   if (!res.ok) throw new Error(`state.json: HTTP ${res.status}`);
   return res.json();
 }
+
+// Package pages are namespace-scoped so a community iluxav/notify and the
+// curated apps/notify each get their own page; ply stays bare for the
+// short URLs everything already links to.
+export const pkgHref = (ns: string, name: string) =>
+  ns === "ply"
+    ? `/registry/${encodeURIComponent(name)}/`
+    : `/registry/${encodeURIComponent(ns)}/${encodeURIComponent(name)}/`;
+
+export const findPackage = (state: RegistryState, slug: string[]) => {
+  const [ns, name] = slug.length === 1 ? ["ply", slug[0]] : slug;
+  if (slug.length > 2) return undefined;
+  return (
+    state.packages.find((x) => x.namespace === ns && x.name === name) ??
+    // pre-namespace URLs for non-ply packages keep working (first match)
+    (slug.length === 1 ? state.packages.find((x) => x.name === name) : undefined)
+  );
+};
 
 // TOML: a bare key containing a dot is a nested table — quote such names
 export const depLine = (p: RegistryPackage, range: string) => {

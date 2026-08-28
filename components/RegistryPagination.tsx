@@ -4,11 +4,13 @@ type RegistryPaginationProps = {
   page: number;
   pageCount: number;
   query: string;
+  filter?: string;
 };
 
-function registryHref(page: number, query: string) {
+function registryHref(page: number, query: string, filter?: string) {
   const params = new URLSearchParams();
   if (query) params.set("q", query);
+  if (filter && filter !== "all") params.set("f", filter);
   if (page > 1) params.set("page", String(page));
   const suffix = params.toString();
   return suffix ? `/registry/?${suffix}` : "/registry/";
@@ -18,6 +20,7 @@ export function RegistryPagination({
   page,
   pageCount,
   query,
+  filter,
 }: RegistryPaginationProps) {
   if (pageCount <= 1) return null;
 
@@ -28,7 +31,7 @@ export function RegistryPagination({
     >
       {page > 1 ? (
         <Link
-          href={registryHref(page - 1, query)}
+          href={registryHref(page - 1, query, filter)}
           rel="prev"
           className="inline-flex min-h-11 items-center text-fade transition-colors hover:text-accent"
         >
@@ -44,7 +47,7 @@ export function RegistryPagination({
 
       {page < pageCount ? (
         <Link
-          href={registryHref(page + 1, query)}
+          href={registryHref(page + 1, query, filter)}
           rel="next"
           className="inline-flex min-h-11 items-center text-fade transition-colors hover:text-accent"
         >
