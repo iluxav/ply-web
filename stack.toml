@@ -18,7 +18,7 @@ name = "plybox-db"
 e    = ["POSTGRES_PASSWORD=$POSTGRES_PASSWORD", "POSTGRES_DB=$POSTGRES_DB"]
 
 [[app]]
-run     = "https://github.com/iluxav/ply-web/releases/download/v0.4.11/plybox-web-0.4.11-linux-x64.img"
+run     = "https://github.com/iluxav/ply-web/releases/download/v0.4.12/plybox-web-0.4.12-linux-x64.img"
 name    = "plybox-web"
 after   = ["plybox-db"]
 publish = ["internal:3000"]
@@ -27,6 +27,7 @@ e = [
   # the db member by its bridge name — `after` injects PLYBOX_DB_HOST (named
   # after the MEMBER), not the POSTGRES_HOST this app's contract reads
   "POSTGRES_HOST=plybox-db.ply",
+  "PLY_ADMIN_LOGINS=$PLY_ADMIN_LOGINS",
   "POSTGRES_PASSWORD=$POSTGRES_PASSWORD",
   "POSTGRES_DB=$POSTGRES_DB",
   "GITHUB_CLIENT_ID=$GITHUB_CLIENT_ID",
