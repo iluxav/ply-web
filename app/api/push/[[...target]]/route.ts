@@ -1,24 +1,30 @@
-// `ply push` lands here — two modes, one record shape:
+// Publishing: `ply push` lands here, and so does plain curl. The CLI is a
+// convenience, never a requirement — one key, one POST.
 //
-//   POST /api/push                       (bytes: the registry stores them)
+//   POST /api/push/<namespace>/<filename>   (bytes: the registry stores them)
 //   Authorization: Bearer ply_…
-//   X-Ply-Filename: myapp-1.2.0-linux-x64.img
 //   body: the image
 //
-//   POST /api/push                       (URL: the registry records, never stores)
+//   POST /api/push                          (same, filename in a header)
+//   X-Ply-Filename: myapp-1.2.0-linux-x64.img
+//
+//   POST /api/push[/<namespace>]            (URL: the registry records, never stores)
 //   Content-Type: application/json
 //   body: {"url": "https://…/myapp-1.2.0-linux-x64.img"}
 //   The server fetches the URL ONCE and hashes it — names are claims,
 //   hashes are proof, and a catalog entry without a server-computed
 //   sha256 would be a rumor. Bytes stay wherever the publisher hosts them.
 //
-// The owner is the token's GitHub login — no claims, no squatting. The
-// registry is append-only: a version's bytes never change. Bytes go to
-// R2 at {owner}/{name}/, the catalog files regenerate, and the existing
-// static read path picks the package up with zero new resolution code.
+// The namespace defaults to the key's GitHub login — yours by construction,
+// no claims, no squatting. Publishing anywhere else (the official `ply` and
+// `apps` shelves, a shared org) needs a `namespace_grants` row. The registry
+// is append-only: a version's bytes never change. Bytes go to R2 at
+// {owner}/{name}/, the catalog files regenerate, and the existing static
+// read path picks the package up with zero new resolution code.
 import { NextResponse } from "next/server";
 import { createHash } from "node:crypto";
 import { userForToken } from "@/lib/auth";
+import { canPublish, isReserved } from "@/lib/namespaces";
 import { ready } from "@/lib/db";
 import { getObject, putObject } from "@/lib/r2";
 
@@ -50,10 +56,28 @@ export function parseOriginUrl(raw: string):
   return { url: u.toString(), filename, name: m[1], version: m[2], arch: m[3] };
 }
 
-export async function POST(req: Request) {
+export async function POST(req: Request, ctx: { params: Promise<{ target?: string[] }> }) {
   const auth = req.headers.get("authorization") ?? "";
   const user = await userForToken(auth.replace(/^Bearer\s+/i, ""));
-  if (!user) return NextResponse.json({ error: "log in first: ply login" }, { status: 401 });
+  if (!user) {
+    return NextResponse.json(
+      { error: "publish with a key: Authorization: Bearer ply_… (ply login, or plybox.sh/account)" },
+      { status: 401 },
+    );
+  }
+
+  // Two shapes, one handler:
+  //   POST /api/push                          filename in X-Ply-Filename, owner = your login
+  //   POST /api/push/<namespace>/<filename>   both in the path — the curl-able form
+  const { target } = await ctx.params;
+  const segments = (target ?? []).filter(Boolean);
+  if (segments.length > 2) {
+    return NextResponse.json(
+      { error: "expected /api/push or /api/push/<namespace>/<filename>" },
+      { status: 404 },
+    );
+  }
+  const [pathNamespace, pathFilename] = segments;
 
   // URL mode: a JSON body names where the bytes already live
   let origin: { url: string; filename: string; name: string; version: string; arch: string } | null = null;
@@ -65,7 +89,11 @@ export async function POST(req: Request) {
     origin = parsed;
   }
 
-  const filename = origin?.filename ?? req.headers.get("x-ply-filename") ?? "";
+  const filename =
+    origin?.filename ??
+    (pathFilename ? decodeURIComponent(pathFilename) : null) ??
+    req.headers.get("x-ply-filename") ??
+    "";
   const imgM = NAME_RE.exec(filename);
   const stackM = STACK_RE.exec(filename);
   let name: string, version: string, arch: string, isStack: boolean;
@@ -86,7 +114,25 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  const owner = user.login.toLowerCase();
+  // Your own username is yours by construction; any other namespace needs
+  // a grant. An account that has not chosen a username publishes nowhere.
+  if (!user.username && !pathNamespace) {
+    return NextResponse.json(
+      { error: "choose your username first at plybox.sh/account — it becomes your namespace" },
+      { status: 409 },
+    );
+  }
+  const owner = (pathNamespace ?? user.username ?? "").toLowerCase();
+  if (!(await canPublish(user.id, user.username, owner))) {
+    return NextResponse.json(
+      {
+        error: isReserved(owner)
+          ? `\`${owner}\` is an official namespace — publishing there needs a grant`
+          : `you cannot publish to \`${owner}\`${user.username ? ` — your namespace is \`${user.username}\`` : " — choose your username at plybox.sh/account"}`,
+      },
+      { status: 403 },
+    );
+  }
 
   // Client-derived catalog metadata (X-Ply-Meta) — the client reads the
   // image's own manifest + lockfile and sends the result; the server stores

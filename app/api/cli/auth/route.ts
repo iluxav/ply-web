@@ -10,7 +10,13 @@ export async function POST(req: Request) {
   }
   const gh = await githubUser(body.github_token);
   if (!gh) return NextResponse.json({ error: "github token not accepted" }, { status: 401 });
-  const token = await issueToken(gh.id, gh.login, gh.name ?? "");
-  if (!token) return NextResponse.json({ error: "registry accounts are not enabled here" }, { status: 503 });
-  return NextResponse.json({ token, login: gh.login });
+  const issued = await issueToken(gh);
+  if (!issued) return NextResponse.json({ error: "registry accounts are not enabled here" }, { status: 503 });
+  // `login` stays the CLI's field name; its VALUE is the namespace — null
+  // until the person chooses one on the site, which the CLI reports.
+  return NextResponse.json({
+    token: issued.token,
+    login: issued.username,
+    github_login: issued.login,
+  });
 }

@@ -88,6 +88,34 @@ export async function ready() {
     await s`ALTER TABLE versions ADD COLUMN IF NOT EXISTS dependencies jsonb NOT NULL DEFAULT '[]'::jsonb`;
     // For a stack version: the run sequence (mirrors the pushed `[[app]]`).
     await s`ALTER TABLE versions ADD COLUMN IF NOT EXISTS apps jsonb NOT NULL DEFAULT '[]'::jsonb`;
+    // Identity is the verified email, not the GitHub handle: handles get
+    // renamed (and the freed name re-registered by someone else), and a
+    // second provider — Google, say — must land on the SAME account. The
+    // namespace is a `username` the person CHOOSES once and keeps, so
+    // renaming on GitHub never moves, breaks, or hands over a namespace.
+    await s`ALTER TABLE users ADD COLUMN IF NOT EXISTS email text`;
+    await s`ALTER TABLE users ADD COLUMN IF NOT EXISTS username text`;
+    await s`ALTER TABLE users ALTER COLUMN github_id DROP NOT NULL`;
+    await s`
+      CREATE UNIQUE INDEX IF NOT EXISTS users_email_key
+      ON users (lower(email)) WHERE email IS NOT NULL`;
+    await s`
+      CREATE UNIQUE INDEX IF NOT EXISTS users_username_key
+      ON users (username) WHERE username IS NOT NULL`;
+    // Everyone who published before this existed keeps the namespace their
+    // packages are already filed under.
+    await s`UPDATE users SET username = lower(login) WHERE username IS NULL`;
+
+    // Namespaces beyond your own login: the official `ply`/`apps` shelves,
+    // or a shared org name. Your own login needs no row — it is yours by
+    // construction; a grant is how anything ELSE becomes publishable.
+    await s`
+      CREATE TABLE IF NOT EXISTS namespace_grants (
+        namespace  text NOT NULL,
+        user_id    int  NOT NULL REFERENCES users(id),
+        created_at timestamptz NOT NULL DEFAULT now(),
+        PRIMARY KEY (namespace, user_id)
+      )`;
     await s`
       CREATE TABLE IF NOT EXISTS sessions (
         id         text PRIMARY KEY,

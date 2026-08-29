@@ -2,7 +2,7 @@
 // place the client secret exists) turns it into an identity, the identity
 // into a session row, the row into a cookie.
 import { NextResponse } from "next/server";
-import { githubUser } from "@/lib/auth";
+import { githubUser, upsertGithubUser } from "@/lib/auth";
 import { ready } from "@/lib/db";
 import { createSession, cookieAttrs } from "@/lib/session";
 
@@ -32,10 +32,8 @@ export async function GET(req: Request) {
 
   const sql = await ready();
   if (!sql) return NextResponse.redirect(new URL("/account/?err=nodb", ORIGIN));
-  const [user] = await sql`
-    INSERT INTO users (github_id, login, name) VALUES (${gh.id}, ${gh.login}, ${gh.name ?? ""})
-    ON CONFLICT (github_id) DO UPDATE SET login = ${gh.login}
-    RETURNING id`;
+  const user = await upsertGithubUser(gh);
+  if (!user) return NextResponse.redirect(new URL("/account/?err=nodb", ORIGIN));
   const session = await createSession(user.id);
   const res = NextResponse.redirect(new URL("/account/", ORIGIN));
   if (session) res.cookies.set(cookieAttrs(session));

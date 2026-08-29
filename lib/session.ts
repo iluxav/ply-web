@@ -25,10 +25,18 @@ export async function sessionUser() {
   const id = jar.get(COOKIE)?.value;
   if (!id) return null;
   const rows = await sql`
-    SELECT u.id, u.login, u.name FROM sessions s
+    SELECT u.id, u.login, u.name, u.username, u.email FROM sessions s
     JOIN users u ON u.id = s.user_id
     WHERE s.id = ${id} AND s.expires_at > now()`;
-  return rows[0] ?? null;
+  return (
+    (rows[0] as {
+      id: number;
+      login: string | null;
+      name: string;
+      username: string | null;
+      email: string | null;
+    }) ?? null
+  );
 }
 
 export async function destroySession() {
