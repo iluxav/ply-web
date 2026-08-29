@@ -1,0 +1,33 @@
+# plybox — the site + its database, as one stack.
+#
+#   local:  ply up ./stack.toml --env-file ~/plybox.env
+#   host:   copy to /var/lib/ply/deployments/plybox.toml (env_file below)
+#
+# The web member is the CI-built image by direct URL — no registry push
+# involved. A new version is a new URL: bump it, the host converges.
+
+[stack]
+name = "plybox"
+version = "1.0.0"
+description = "plybox.sh — landing, docs, registry UI + API."
+env_file = "/etc/ply/plybox.env"
+
+[[app]]
+run  = "postgres@17"
+name = "plybox-db"
+e    = ["POSTGRES_PASSWORD=$POSTGRES_PASSWORD", "POSTGRES_DB=$POSTGRES_DB"]
+
+[[app]]
+run     = "https://github.com/iluxav/ply-web/releases/download/v0.4.9/plybox-web-0.4.9-linux-x64.img"
+name    = "plybox-web"
+after   = ["plybox-db"]
+publish = ["internal:3000"]
+e = [
+  "POSTGRES_PASSWORD=$POSTGRES_PASSWORD",
+  "POSTGRES_DB=$POSTGRES_DB",
+  "GITHUB_CLIENT_ID=$GITHUB_CLIENT_ID",
+  "GITHUB_CLIENT_SECRET=$GITHUB_CLIENT_SECRET",
+  "R2_ACCOUNT_ID=$R2_ACCOUNT_ID",
+  "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID",
+  "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY",
+]
