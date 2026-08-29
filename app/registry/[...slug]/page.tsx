@@ -9,6 +9,7 @@ import {
   findPackage,
   fmtSize,
   pkgHref,
+  srcOf,
   type RegistryPackage,
 } from "@/lib/registry";
 import { CopyButton } from "@/components/CopyButton";
@@ -82,9 +83,7 @@ export default async function PackagePage({
               operatingSystem: "Linux",
               softwareVersion: latest.version,
               softwareRequirements: `Linux on ${architectures.join(" or ")}`,
-              downloadUrl: latestBuilds.map(
-                (version) => `https://registry.plybox.sh/${version.path}`,
-              ),
+              downloadUrl: latestBuilds.map(srcOf).filter(Boolean),
               license: p.license || undefined,
               isPartOf: { "@id": `${SITE_URL}/registry/#catalog` },
             },
@@ -155,11 +154,11 @@ export default async function PackagePage({
         </thead>
         <tbody>
           {[...p.versions].reverse().map((v) => (
-            <tr key={v.img} className="border-b border-edge last:border-b-0">
+            <tr key={`${v.version}-${archOf(v)}`} className="border-b border-edge last:border-b-0">
               <td className="whitespace-nowrap px-4 py-3 font-mono">{v.version}</td>
               <td className="px-4 py-2">
                 <a
-                  href={`https://registry.plybox.sh/${v.path}`}
+                  href={srcOf(v)}
                   className="secondary-action inline-flex min-h-8 items-center border border-edge px-2 font-mono text-[10px] text-fade transition-colors hover:border-accent hover:text-accent"
                 >
                   {archOf(v)}

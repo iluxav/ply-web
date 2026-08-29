@@ -26,6 +26,8 @@ import { getObject, putObject } from "@/lib/r2";
 const MAX_BYTES = 512 * 1024 * 1024;
 const MAX_ORIGIN_BYTES = 1024 * 1024 * 1024; // hashing someone's mislinked ISO is not our job
 const NAME_RE = /^([a-z0-9][a-z0-9-]*)-(\d+\.\d+\.\d+)-linux-(x64|arm64)\.img$/;
+// A stack is published as its toml template (no arch — stacks are arch-agnostic).
+const STACK_RE = /^([a-z0-9][a-z0-9-]*)-(\d+\.\d+\.\d+)\.stack\.toml$/;
 
 // A publishable origin URL: https, no query (signed links expire — a
 // cataloged one is a future 404), no fragment, and a basename that obeys
@@ -64,22 +66,74 @@ export async function POST(req: Request) {
   }
 
   const filename = origin?.filename ?? req.headers.get("x-ply-filename") ?? "";
-  const m = NAME_RE.exec(filename);
-  if (!m) {
+  const imgM = NAME_RE.exec(filename);
+  const stackM = STACK_RE.exec(filename);
+  let name: string, version: string, arch: string, isStack: boolean;
+  if (imgM) {
+    [, name, version, arch] = imgM;
+    isStack = false;
+  } else if (stackM && !origin) {
+    // a stack is uploaded (its toml), never URL-referenced
+    [, name, version] = stackM;
+    arch = "any";
+    isStack = true;
+  } else {
     return NextResponse.json(
-      { error: "filename must be <name>-<x.y.z>-linux-<x64|arm64>.img" },
+      {
+        error:
+          "filename must be <name>-<x.y.z>-linux-<x64|arm64>.img or <name>-<x.y.z>.stack.toml",
+      },
       { status: 400 },
     );
   }
-  const [, name, version, arch] = m;
   const owner = user.login.toLowerCase();
+
+  // Client-derived catalog metadata (X-Ply-Meta) — the client reads the
+  // image's own manifest + lockfile and sends the result; the server stores
+  // it verbatim. The bytes' sha256 is what's proven; this is descriptive.
+  type StackApp = {
+    run: string;
+    name?: string;
+    e?: string[];
+    after?: string[];
+    publish?: string[];
+    volume?: string[];
+    domain?: string[];
+    scale?: number;
+  };
+  type Meta = {
+    type: string;
+    volumes: string[];
+    links: string[];
+    dependencies: { name: string; version: string }[];
+    apps: StackApp[];
+  };
+  let meta: Meta = { type: "app", volumes: [], links: [], dependencies: [], apps: [] };
+  try {
+    const raw = req.headers.get("x-ply-meta");
+    if (raw) {
+      const p = JSON.parse(raw) as Partial<Meta>;
+      meta = {
+        type: ["app", "layer", "stack"].includes(p.type ?? "") ? (p.type as string) : "app",
+        volumes: Array.isArray(p.volumes) ? p.volumes : [],
+        links: Array.isArray(p.links) ? p.links : [],
+        dependencies: Array.isArray(p.dependencies) ? p.dependencies : [],
+        apps: Array.isArray(p.apps) ? (p.apps as StackApp[]) : [],
+      };
+    }
+  } catch {
+    /* malformed meta → app defaults; the bytes still publish */
+  }
+  // The filename is authoritative for stack-ness (a .stack.toml is a stack
+  // even if the meta header went missing).
+  if (isStack) meta.type = "stack";
 
   const sql = await ready();
   if (!sql) return NextResponse.json({ error: "registry accounts are not enabled here" }, { status: 503 });
 
   const [pkg] = await sql`
-    INSERT INTO packages (owner, name) VALUES (${owner}, ${name})
-    ON CONFLICT (owner, name) DO UPDATE SET name = ${name}
+    INSERT INTO packages (owner, name, type) VALUES (${owner}, ${name}, ${meta.type})
+    ON CONFLICT (owner, name) DO UPDATE SET type = ${meta.type}
     RETURNING id, owner`;
   const dup = await sql`
     SELECT 1 FROM versions WHERE package_id = ${pkg.id} AND version = ${version} AND arch = ${arch}`;
@@ -142,8 +196,9 @@ export async function POST(req: Request) {
   }
 
   await sql`
-    INSERT INTO versions (package_id, version, arch, filename, bytes, sha256, origin)
-    VALUES (${pkg.id}, ${version}, ${arch}, ${filename}, ${total}, ${sha256}, ${origin?.url ?? null})`;
+    INSERT INTO versions (package_id, version, arch, filename, bytes, sha256, origin, volumes, links, dependencies, apps)
+    VALUES (${pkg.id}, ${version}, ${arch}, ${filename}, ${total}, ${sha256}, ${origin?.url ?? null},
+            ${sql.json(meta.volumes)}, ${sql.json(meta.links)}, ${sql.json(meta.dependencies)}, ${sql.json(meta.apps)})`;
   await sql`INSERT INTO events (kind, owner, name, version) VALUES ('push', ${owner}, ${name}, ${version})`;
 
   // regenerate this package's index + the owner's catalog — reads stay static
@@ -163,7 +218,8 @@ export async function POST(req: Request) {
   );
   const catalog = await sql`
     SELECT p.name, p.type, p.description, p.license, p.homepage,
-           v.version, v.filename, v.arch, v.bytes, v.created_at, v.origin, v.sha256
+           v.version, v.filename, v.arch, v.bytes, v.created_at, v.origin, v.sha256,
+           v.volumes, v.links, v.dependencies, v.apps
     FROM packages p JOIN versions v ON v.package_id = p.id
     WHERE p.owner = ${owner}
     ORDER BY p.name, v.filename`;
@@ -176,13 +232,26 @@ export async function POST(req: Request) {
         versions: [],
       });
     }
-    byName.get(row.name)!.versions.push({
-      version: row.version, img: row.filename, arch: row.arch,
-      // stored bytes get a registry path; URL versions get their origin
+    // src is the v2 canonical location — ALWAYS a full, http-fetchable URL:
+    // the origin for URL versions, the registry URL for stored bytes (an
+    // image, or the stack's toml). img/path/url are kept alongside it so the
+    // current site reader still works. A stack has no image of its own.
+    const isStackRow = row.type === "stack";
+    const src = row.origin ?? `https://registry.plybox.sh/${owner}/${row.name}/${row.filename}`;
+    const v: Record<string, unknown> = {
+      version: row.version,
+      img: isStackRow ? null : row.filename,
+      ...(isStackRow ? {} : { arch: row.arch }),
+      src,
       ...(row.origin ? { url: row.origin } : { path: `${owner}/${row.name}/${row.filename}` }),
       sha256: row.sha256,
       bytes: Number(row.bytes), pushed_at: row.created_at,
-    });
+    };
+    if (Array.isArray(row.volumes) && row.volumes.length) v.volumes = row.volumes;
+    if (Array.isArray(row.links) && row.links.length) v.links = row.links;
+    if (Array.isArray(row.dependencies) && row.dependencies.length) v.dependencies = row.dependencies;
+    if (Array.isArray(row.apps) && row.apps.length) v.apps = row.apps;
+    byName.get(row.name)!.versions.push(v);
   }
   const ownerPkgs = [...byName.values()];
   await putObject(
@@ -226,6 +295,8 @@ export async function POST(req: Request) {
     sha256,
     stored: !origin,
     url: origin?.url ?? `https://registry.plybox.sh/${owner}/${name}/${filename}`,
-    use: `app = "${name}"` + "\n" + `source = "https://registry.plybox.sh/${owner}/{package}"`,
+    use: isStack
+      ? `ply run ${owner}/${name}`
+      : `app = "${name}"` + "\n" + `source = "https://registry.plybox.sh/${owner}/{package}"`,
   });
 }

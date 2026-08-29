@@ -81,6 +81,13 @@ export async function ready() {
         created_at timestamptz NOT NULL DEFAULT now(),
         UNIQUE (package_id, version, arch)
       )`;
+    // v2 catalog metadata — derived from the image on the client at push time
+    // (client-derives, server-stores) and echoed verbatim into state.json.
+    await s`ALTER TABLE versions ADD COLUMN IF NOT EXISTS volumes jsonb NOT NULL DEFAULT '[]'::jsonb`;
+    await s`ALTER TABLE versions ADD COLUMN IF NOT EXISTS links jsonb NOT NULL DEFAULT '[]'::jsonb`;
+    await s`ALTER TABLE versions ADD COLUMN IF NOT EXISTS dependencies jsonb NOT NULL DEFAULT '[]'::jsonb`;
+    // For a stack version: the run sequence (mirrors the pushed `[[app]]`).
+    await s`ALTER TABLE versions ADD COLUMN IF NOT EXISTS apps jsonb NOT NULL DEFAULT '[]'::jsonb`;
     await s`
       CREATE TABLE IF NOT EXISTS sessions (
         id         text PRIMARY KEY,

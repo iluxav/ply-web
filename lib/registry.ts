@@ -4,12 +4,37 @@ import { cacheLife } from "next/cache";
 
 export type RegistryVersion = {
   version: string;
-  img: string;
+  img: string | null; // null for a stack (no image of its own)
   arch?: "x64" | "arm64";
-  path: string;
+  // src is the v2 canonical location: a full, http-fetchable URL. `path` is
+  // the pre-v2 field (a bare path under registry.plybox.sh), kept as a
+  // fallback until the whole catalog is rebuilt.
+  src?: string;
+  path?: string;
   bytes: number;
   pushed_at: string;
+  volumes?: string[];
+  links?: string[];
+  dependencies?: { name: string; version: string }[];
+  apps?: StackApp[]; // for a stack version: the run sequence
 };
+
+// A stack member, as the catalog records it (mirrors a `[[app]]` block).
+export type StackApp = {
+  run: string;
+  name?: string;
+  e?: string[];
+  after?: string[];
+  publish?: string[];
+  volume?: string[];
+  domain?: string[];
+  scale?: number;
+};
+
+// The download/fetch location for a version: the v2 `src` when present, else
+// the pre-v2 registry path. A stack's src is its toml, not an image.
+export const srcOf = (v: RegistryVersion): string =>
+  v.src ?? (v.path ? `https://registry.plybox.sh/${v.path}` : "");
 
 export type AlpineProvenance = {
   branch: string; // e.g. "v3.20"
@@ -46,7 +71,7 @@ export type RegistryState = {
 };
 
 export const archOf = (v: RegistryVersion): "x64" | "arm64" =>
-  v.arch ?? (v.img.endsWith("-arm64.img") ? "arm64" : "x64");
+  v.arch ?? (v.img?.endsWith("-arm64.img") ? "arm64" : "x64");
 
 export async function registryState(): Promise<RegistryState> {
   "use cache";
