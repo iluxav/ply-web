@@ -1,6 +1,8 @@
-# ply-web — build plybox.sh (site + docs) and release the image.
-# The prod host runs a `plybox-web` deployment (github = "iluxav/ply-web")
-# with the reconcile timer — it pulls each release itself within a minute.
+# ply-web — build plybox.sh (site + docs), release the image, publish it.
+# Prod runs the `plybox` stack whose web member is `ply/ply-web`: this job
+# pushes each build to that namespace, and the reconcile timer resolves the
+# newest version within a minute. Nothing on the host is edited to deploy —
+# no URL to bump, no version pinned anywhere but here.
 # Docs, install.sh and the agent skill live in the ply repo (beside the
 # code they document) and are checked out alongside at build time.
 name: release
@@ -55,5 +57,14 @@ jobs:
         run: |
           gh release create -R "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME" "${{ steps.img.outputs.image }}" \
             --title "plybox.sh $GITHUB_REF_NAME" \
-            --notes "site image — prod pulls this on its next reconcile beat" || \
+            --notes "site image — prod resolves it from the registry on its next reconcile beat" || \
           gh release upload -R "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME" "${{ steps.img.outputs.image }}"
+
+      # A runner cannot do the device flow, so it publishes with a key.
+      # This is what the stack's `run = "ply/ply-web"` member resolves.
+      - name: publish to the registry
+        env:
+          PLY_TOKEN: ${{ secrets.PLY_TOKEN }}
+        run: |
+          test -n "$PLY_TOKEN" || { echo "::error::PLY_TOKEN secret is not set"; exit 1; }
+          ply push "${{ steps.img.outputs.image }}" --as ply
