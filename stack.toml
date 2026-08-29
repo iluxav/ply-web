@@ -3,9 +3,10 @@
 #   local:  ply up ./stack.toml --env-file ~/plybox.env
 #   host:   copy to /var/lib/ply/deployments/plybox.toml (env_file below)
 #
-# The web member is `ply/ply-web`: CI publishes each build to that
-# namespace and the host resolves the newest version on its next reconcile
-# beat. Nothing here names a version, so shipping is `make release` alone.
+# The web member is `ply/plybox-web` — the PACKAGE name from ply.toml, not
+# the repo name. CI publishes each build to that namespace and the host
+# resolves the newest version on its next reconcile beat, so nothing here
+# names a version and shipping is `make release` alone.
 
 [stack]
 name = "plybox"
@@ -19,7 +20,7 @@ name = "plybox-db"
 e    = ["POSTGRES_PASSWORD=$POSTGRES_PASSWORD", "POSTGRES_DB=$POSTGRES_DB"]
 
 [[app]]
-run     = "ply/ply-web"
+run     = "ply/plybox-web"
 name    = "plybox-web"
 after   = ["plybox-db"]
 publish = ["internal:3000"]
