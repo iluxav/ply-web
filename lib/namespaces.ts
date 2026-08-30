@@ -8,11 +8,16 @@
 // The reserved names are never implicitly yours, even if your GitHub login
 // happens to be one of them — otherwise registering the right account would
 // hand someone the official shelf.
+//
+// There are exactly two, and they are the two official shelves: `ply` (the
+// layers ply itself builds on) and `apps` (the ready-to-run ones). Every
+// other name is a person's to take, first come. A longer list of "words we
+// might want later" only looked like caution: each name on it became a grant
+// row on every admin login, and each grant row silently made that name
+// unclaimable by anyone.
 import { ready } from "./db";
 
-export const RESERVED = new Set([
-  "ply", "apps", "api", "www", "admin", "registry", "docs", "account", "login", "new",
-]);
+export const RESERVED = new Set(["ply", "apps"]);
 
 export function isReserved(namespace: string) {
   return RESERVED.has(namespace.toLowerCase());
