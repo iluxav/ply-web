@@ -332,7 +332,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ target?: strin
       total_bytes: packages.reduce((n, p) => n + (p.versions ?? []).reduce((m, v) => m + (v.bytes ?? 0), 0), 0),
       packages,
     };
-    await putObject("state.json", JSON.stringify(snapshot, null, 1), "application/json", "public, max-age=300");
+    // 30s, not 300: this file is rewritten on every push, and its TTL is how
+  // long a just-published package stays invisible to every reader.
+  await putObject("state.json", JSON.stringify(snapshot, null, 1), "application/json", "public, max-age=30");
   });
 
   return NextResponse.json({
