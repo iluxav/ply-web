@@ -44,8 +44,9 @@ function searchQuery(params: RegistrySearchParams) {
   return (first(params.q) ?? "").trim().slice(0, 120);
 }
 
-// Filters cut by the metadata every package carries: its type, and
-// whether it lives outside the curated ply/apps namespaces.
+// Filters cut by the metadata every package carries: its type, and whether
+// it lives outside the curated `ply` namespace. Type is a TAG here, never an
+// address — which is why `apps/` stopped being a namespace of its own.
 const FILTERS = ["all", "apps", "layers", "stacks", "community"] as const;
 type Filter = (typeof FILTERS)[number];
 
@@ -55,8 +56,7 @@ function filterOf(params: RegistrySearchParams): Filter {
 }
 
 const typeOf = (pkg: RegistryPackage) => pkg.type ?? "layer";
-const isCommunity = (pkg: RegistryPackage) =>
-  pkg.namespace !== "ply" && pkg.namespace !== "apps";
+const isCommunity = (pkg: RegistryPackage) => pkg.namespace !== "ply";
 
 function matchesFilter(pkg: RegistryPackage, filter: Filter) {
   switch (filter) {

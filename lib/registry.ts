@@ -73,6 +73,26 @@ export type RegistryState = {
 export const archOf = (v: RegistryVersion): "x64" | "arm64" =>
   v.arch ?? (v.img?.endsWith("-arm64.img") ? "arm64" : "x64");
 
+// `apps/` was a namespace chosen by TYPE: runnable packages went there,
+// kegs to `ply/`. A package is <namespace>/<name>, and being runnable is a
+// property it has (an entrypoint), not a place it lives — so the two were
+// folded into one. The old copies are still SERVED, because a host released
+// before the fold resolves bare names through apps/, but they are the same
+// packages and must not be browsed as a second set.
+const ALIAS_NS = "apps";
+
+/// Drop an alias entry whose package also exists under `ply/`. Anything left
+/// alone there is still shown: hiding a package nobody republished would be
+/// worse than showing it under a deprecated name.
+function dropFoldedAliases(packages: RegistryPackage[]): RegistryPackage[] {
+  const official = new Set(
+    packages.filter((p) => p.namespace === "ply").map((p) => p.name),
+  );
+  return packages.filter(
+    (p) => p.namespace !== ALIAS_NS || !official.has(p.name),
+  );
+}
+
 export async function registryState(): Promise<RegistryState> {
   "use cache";
   cacheLife("minutes");
@@ -80,7 +100,9 @@ export async function registryState(): Promise<RegistryState> {
     headers: { "User-Agent": "plybox-web" },
   });
   if (!res.ok) throw new Error(`state.json: HTTP ${res.status}`);
-  return res.json();
+  const state: RegistryState = await res.json();
+  const packages = dropFoldedAliases(state.packages ?? []);
+  return { ...state, packages, package_count: packages.length };
 }
 
 // Package pages are namespace-scoped so a community iluxav/notify and the
@@ -96,6 +118,11 @@ export const findPackage = (state: RegistryState, slug: string[]) => {
   if (slug.length > 2) return undefined;
   return (
     state.packages.find((x) => x.namespace === ns && x.name === name) ??
+    // an /registry/apps/<name> link predates the fold — it names the same
+    // package, which now lives under ply/
+    (ns === ALIAS_NS
+      ? state.packages.find((x) => x.namespace === "ply" && x.name === name)
+      : undefined) ??
     // pre-namespace URLs for non-ply packages keep working (first match)
     (slug.length === 1 ? state.packages.find((x) => x.name === name) : undefined)
   );
