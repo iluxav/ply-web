@@ -6,8 +6,10 @@ import {
   archOf,
   alpineLinks,
   depLine,
+  depsOf,
   findPackage,
   fmtSize,
+  paramRows,
   pkgHref,
   srcOf,
   type RegistryPackage,
@@ -146,11 +148,43 @@ export default async function PackagePage({
         <CopyButton value={`[dependencies]\n${dependency}`} className="joined-control shrink-0 border-y-0 border-r-0" />
       </div>
 
+      {paramRows(latest.params).length > 0 && (
+        <>
+          <h2 className="mt-10 font-mono text-[10px] uppercase tracking-wider text-fade">params</h2>
+          <p className="mt-1 font-mono text-xs text-fade">reference as {"{"}{p.name}.&lt;name&gt;{"}"} from a stack; set with params = {"{ <name> = \"…\" }"}</p>
+          <div className="mt-2 overflow-x-auto border border-edge">
+            <table className="w-full text-sm">
+              <tbody>
+                {paramRows(latest.params).map((r) => (
+                  <tr key={r.name} className="border-b border-edge last:border-b-0">
+                    <td className="whitespace-nowrap px-4 py-2 font-mono">{r.name}</td>
+                    <td className="px-4 py-2 font-mono text-xs text-fade">{r.kind}</td>
+                    <td className="px-4 py-2 font-mono text-xs">{r.value ?? ""}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+      {(latest.publish || latest.volumes?.length || depsOf(latest).length > 0) && (
+        <p className="mt-6 font-mono text-xs text-fade">
+          {latest.publish && <span className="mr-4">publish: {latest.publish}</span>}
+          {latest.volumes?.length ? <span className="mr-4">volumes: {latest.volumes.join(", ")}</span> : null}
+          {depsOf(latest).length > 0 && <span>depends on: {depsOf(latest).map((d) => `${d.name} ${d.version}`).join(", ")}</span>}
+        </p>
+      )}
+      {latest.manifest && (
+        <p className="mt-2 font-mono text-xs text-fade">
+          <a href={latest.manifest} className="text-accent hover:underline">ply.toml</a> — the manifest as published
+        </p>
+      )}
+
       <h2 className="mt-10 font-mono text-[10px] uppercase tracking-wider text-fade">versions</h2>
       <div className="mt-2 overflow-x-auto border border-edge">
       <table className="w-full min-w-lg text-sm">
         <thead className="sr-only">
-          <tr><th>Version</th><th>Architecture</th><th>Size</th><th>Published</th></tr>
+          <tr><th>Version</th><th>Architecture</th><th>Verified</th><th>Size</th><th>Published</th></tr>
         </thead>
         <tbody>
           {[...p.versions].reverse().map((v) => (
@@ -163,6 +197,9 @@ export default async function PackagePage({
                 >
                   {archOf(v)}
                 </a>
+              </td>
+              <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-fade">
+                {v.verified === false ? <span title="bytes hosted by the publisher; sha256 reported by their ply">external</span> : ""}
               </td>
               <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-fade">{fmtSize(v.bytes)}</td>
               <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-fade">

@@ -1,0 +1,64 @@
+{
+  "owner": "ply",
+  "name": "postgres",
+  "version": "17.10.7",
+  "type": "app",
+  "manifest_toml": "# postgres — first-class runnable image for `ply run postgres@17`.\n# Speaks the docker-library env contract, so existing muscle memory works:\n#\n#   ply run postgres@17 -e POSTGRES_PASSWORD=dev -e POSTGRES_DB=todos\n#\n# -e POSTGRES_PASSWORD=... is REQUIRED for this standalone form: password\n# below is a [params] secret, and a bare `ply run` refuses to resolve a\n# secret hole on its own rather than mint or leak the literal `{password}`\n# — pass it yourself, or run this image inside a stack instead (`ply up`\n# mints and stores it for you). POSTGRES_USER/POSTGRES_DB default from\n# [params] (postgres/postgres) and stay overridable with -e the same way.\n#\n# Backup is composition, not a sidecar: rclone is a dependency, so\n# BACKUP_DEST makes the database dump itself on a schedule and\n# BACKUP_RESTORE makes a fresh volume restore itself before serving.\n# See run.sh for the full env contract; restore.sh for surgical restores.\n\n[package]\nname = \"postgres\"\nversion = \"17.10.7\"\nowner = \"ply\"\ndescription = \"PostgreSQL relational database (docker-library env contract)\"\nlicense = \"PostgreSQL\"\nhomepage = \"https://www.postgresql.org\"\nuser = \"postgres:70:70\"\nentrypoint = [\"./run.sh\"]\n# SIGTERM to a postmaster is a SMART shutdown: it waits for every client to\n# disconnect, so a database with a live connection pool never stops at all.\n# SIGINT is the fast shutdown — disconnect clients, checkpoint, exit — and is\n# what the docker-library image asks for too.\nstop_signal = \"SIGINT\"\ninclude = [\"run.sh\", \"restore.sh\", \"cacert.pem\"]\nbase = \"debian@13\"\n\n[dependencies]\npostgresql17 = \"17\"\nrclone = \"1.60\"\n\n[volumes]\ndata = { path = \"/var/lib/postgresql/data\" }\n\n[ports]\ndb = 5432\n\n[health]\nport = 5432\ngrace = \"30s\"\n\n[restart]\npolicy = \"on-failure\"\n\n[params]\nuser     = \"postgres\"                                               # plain value = default\ndatabase = \"postgres\"\npassword = { secret = true }                                        # minted per stack\nurl      = \"postgres://{user}:{password}@{host}:{port}/{database}\"  # computed — interpolates others\n\n[env]                                  # the provider configures ITSELF from the same namespace\nPOSTGRES_USER     = \"{user}\"\nPOSTGRES_DB       = \"{database}\"\nPOSTGRES_PASSWORD = \"{password}\"\n\n[sources]\ndefault = \"https://registry.plybox.sh/ply/{package}\"\n",
+  "manifest": {
+    "dependencies": {
+      "postgresql17": "17",
+      "rclone": "1.60"
+    },
+    "env": {
+      "POSTGRES_DB": "{database}",
+      "POSTGRES_PASSWORD": "{password}",
+      "POSTGRES_USER": "{user}"
+    },
+    "health": {
+      "grace": "30s",
+      "port": 5432
+    },
+    "package": {
+      "base": "debian@13",
+      "description": "PostgreSQL relational database (docker-library env contract)",
+      "entrypoint": [
+        "./run.sh"
+      ],
+      "homepage": "https://www.postgresql.org",
+      "include": [
+        "run.sh",
+        "restore.sh",
+        "cacert.pem"
+      ],
+      "license": "PostgreSQL",
+      "name": "postgres",
+      "owner": "ply",
+      "stop_signal": "SIGINT",
+      "user": "postgres:70:70",
+      "version": "17.10.7"
+    },
+    "params": {
+      "database": "postgres",
+      "password": {
+        "secret": true
+      },
+      "url": "postgres://{user}:{password}@{host}:{port}/{database}",
+      "user": "postgres"
+    },
+    "ports": {
+      "db": 5432
+    },
+    "restart": {
+      "policy": "on-failure"
+    },
+    "sources": {
+      "default": "https://registry.plybox.sh/ply/{package}"
+    },
+    "volumes": {
+      "data": {
+        "path": "/var/lib/postgresql/data"
+      }
+    }
+  },
+  "artifacts": []
+}

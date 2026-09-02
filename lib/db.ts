@@ -32,12 +32,36 @@ export function db() {
   return sql;
 }
 
+/// Anything that runs a query: the pooled client, or a transaction handle
+/// from `sql.begin`. postgres.js's `TransactionSql` is NOT a subtype of
+/// `Sql` (it has no `.begin`/`.reserve`), so every helper meant to work
+/// inside a transaction has to name this instead.
+export type Queryable = postgres.ISql;
+
 // Idempotent, run-once-per-process. CREATE IF NOT EXISTS keeps restarts
 // boring; real migrations get a version table the day they need one.
 export async function ready() {
   const s = db();
   if (!s) return null;
   if (!migrated) {
+    // One connection, one lock, one migration. `pg_advisory_lock` is
+    // SESSION-scoped — taken on whichever pooled connection served that one
+    // statement, which the next statement need not get — so the lock is
+    // taken as `pg_advisory_xact_lock` inside `begin`: same connection for
+    // every statement below, released on commit OR on error, with no unlock
+    // to forget. Two cold starts (or two concurrent first requests) then
+    // queue instead of racing on the same CREATEs and the same seeds.
+    await s.begin(async (tx) => {
+      await tx`SELECT pg_advisory_xact_lock(771601)`;
+      await migrate(tx);
+    });
+    migrated = true;
+  }
+  return s;
+}
+
+/// The whole schema. Runs under the migration lock, on one connection.
+async function migrate(s: Queryable) {
     await s`
       CREATE TABLE IF NOT EXISTS users (
         id         serial PRIMARY KEY,
@@ -132,7 +156,77 @@ export async function ready() {
         version text NOT NULL DEFAULT '',
         at    timestamptz NOT NULL DEFAULT now()
       )`;
-    migrated = true;
-  }
-  return s;
+    // v3: the manifest IS the record. One row per version; artifacts are a
+    // jsonb list; every listing field is derived from `manifest` at write time.
+    await s`
+      CREATE TABLE IF NOT EXISTS records (
+        id            serial PRIMARY KEY,
+        package_id    int NOT NULL REFERENCES packages(id),
+        version       text NOT NULL,
+        type          text NOT NULL,
+        manifest_toml text NOT NULL,
+        manifest      jsonb NOT NULL,
+        artifacts     jsonb NOT NULL DEFAULT '[]'::jsonb,
+        pushed_at     timestamptz NOT NULL DEFAULT now(),
+        published_by  int REFERENCES users(id),
+        UNIQUE (package_id, version)
+      )`;
+    await s`CREATE INDEX IF NOT EXISTS records_manifest_gin ON records USING gin (manifest)`;
+    // Bytes the registry stored itself: the only srcs a publish may mark verified.
+    await s`
+      CREATE TABLE IF NOT EXISTS uploads (
+        key        text PRIMARY KEY,
+        sha256     text NOT NULL,
+        bytes      bigint NOT NULL,
+        user_id    int NOT NULL REFERENCES users(id),
+        created_at timestamptz NOT NULL DEFAULT now()
+      )`;
+
+    // v3 bridge, one-time backfill at boot: state.json is now built from
+    // `records` alone, so without this an owner's pre-v3 packages would
+    // vanish from their catalog the moment this deploys — before anyone has
+    // re-pushed a single version, and before the separate backfill script
+    // has run. Seed a manifest-less `records` row (and the matching
+    // `uploads` row) for every legacy `versions` entry that doesn't already
+    // have one. Both inserts are guarded by NOT EXISTS, so this is a no-op
+    // once seeded, or once every version has a real v3 record.
+    await s`ALTER TABLE uploads ALTER COLUMN user_id DROP NOT NULL`; // seeded rows have no user
+    // …and only while `versions` still exists. The bridge is temporary: once
+    // every version has a real record, Phase 14 drops that table, and a
+    // statement that so much as NAMES a dropped relation fails when the
+    // server PARSES it — a `WHERE to_regclass('versions') IS NOT NULL` would
+    // not save it, because relation resolution happens before any WHERE is
+    // evaluated. So the check is here, in TypeScript, and the seeds are
+    // skipped entirely. Without this, `DROP TABLE versions` would brick
+    // every request the next cold start served.
+    const [legacy] = await s`SELECT to_regclass('versions') IS NOT NULL AS present`;
+    if (legacy.present) {
+      await s`
+        INSERT INTO uploads (key, sha256, bytes, user_id)
+        SELECT p.owner || '/' || p.name || '/' || v.filename, v.sha256, v.bytes, NULL
+        FROM versions v JOIN packages p ON p.id = v.package_id
+        WHERE v.origin IS NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM uploads u WHERE u.key = p.owner || '/' || p.name || '/' || v.filename
+          )
+        ON CONFLICT DO NOTHING`;
+      await s`
+        INSERT INTO records (package_id, version, type, manifest_toml, manifest, artifacts, pushed_at, published_by)
+        SELECT
+          v.package_id, v.version, p.type, '', '{}'::jsonb,
+          CASE WHEN p.type = 'stack' THEN '[]'::jsonb ELSE jsonb_agg(jsonb_build_object(
+            'arch', v.arch,
+            'src', COALESCE(v.origin, 'https://registry.plybox.sh/' || p.owner || '/' || p.name || '/' || v.filename),
+            'sha256', v.sha256,
+            'bytes', v.bytes,
+            'verified', v.origin IS NULL
+          )) END,
+          min(v.created_at), NULL
+        FROM versions v JOIN packages p ON p.id = v.package_id
+        WHERE NOT EXISTS (
+          SELECT 1 FROM records r WHERE r.package_id = v.package_id AND r.version = v.version
+        )
+        GROUP BY v.package_id, v.version, p.type, p.owner, p.name
+        ON CONFLICT DO NOTHING`;
+    }
 }

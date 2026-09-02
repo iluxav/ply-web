@@ -9,6 +9,7 @@
     "build": "next build",
     "start": "node .next/standalone/server.js",
     "lint": "eslint",
+    "test": "vitest run",
     "prebuild": "npm run sync-content",
     "postbuild": "rm -rf .next/standalone/.next/static .next/standalone/public .next/standalone/.content && cp -r .next/static .next/standalone/.next/static && cp -r public .next/standalone/public && cp -r .content .next/standalone/.content"
   },
@@ -20,7 +21,8 @@
     "next": "16.3.2",
     "postgres": "^3.4.9",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "smol-toml": "^1.8.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -30,6 +32,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.2",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.11"
   }
 }

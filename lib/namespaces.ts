@@ -27,6 +27,14 @@ export function isReserved(namespace: string) {
 // starts alphanumeric, no trailing dash, 2–39 characters.
 const NAME_RE = /^[a-z0-9][a-z0-9-]{0,37}[a-z0-9]$/;
 
+/// The grammar an owner must satisfy to become an R2 key segment: the
+/// namespace part of `{owner}/{name}/{file}`. Deliberately looser than
+/// `NAME_RE` (a grant may hold a two-letter official shelf, and old logins
+/// predate the username rules) but strict about what would escape a key:
+/// no `/`, no `.`, no uppercase, never empty. Checked on every route that
+/// builds a key from a resolved owner.
+export const isOwnerSegment = (owner: string) => /^[a-z0-9][a-z0-9-]*$/.test(owner);
+
 /// Why this username cannot be claimed, or null if it can.
 export async function usernameProblem(raw: string) {
   const name = raw.trim().toLowerCase();

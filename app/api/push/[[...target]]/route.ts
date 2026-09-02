@@ -26,7 +26,10 @@ import { createHash } from "node:crypto";
 import { userForToken } from "@/lib/auth";
 import { canPublish, isReserved } from "@/lib/namespaces";
 import { ready } from "@/lib/db";
-import { getObject, putObject } from "@/lib/r2";
+import { putObject } from "@/lib/r2";
+import { loadRecord, saveRecord } from "@/lib/records";
+import { writeCatalogFiles, REGISTRY } from "@/lib/catalog-files";
+import { manifestJson } from "@/lib/manifest";
 
 
 const MAX_BYTES = 512 * 1024 * 1024;
@@ -189,9 +192,22 @@ export async function POST(req: Request, ctx: { params: Promise<{ target?: strin
       { status: 409 },
     );
   }
+  // The `versions` dup check above only sees what THIS route has ever
+  // written. A v3 `/api/publish` can publish an artifact for this
+  // version/arch without ever touching `versions` — check the record too,
+  // before any bytes are hashed or stored, or this bridge would silently
+  // replace it.
+  const publishedRecord = await loadRecord(sql, owner, name, version);
+  if (publishedRecord?.artifacts.some((a) => a.arch === arch)) {
+    return NextResponse.json(
+      { error: `${owner}/${name}@${version} (${arch}) is already published — the registry is append-only; bump the version` },
+      { status: 409 },
+    );
+  }
 
   let total = 0;
   let sha256: string;
+  let bytes: Buffer | null = null; // the uploaded bytes, kept only for the stack-toml bridge below
   if (origin) {
     // fetch the claimed bytes once: verify squashfs magic, hash, count.
     // Redirects are followed for the fetch; the ORIGINAL url is what we
@@ -237,8 +253,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ target?: strin
     }
     if (total === 0) return NextResponse.json({ error: "empty body" }, { status: 400 });
     sha256 = hash.digest("hex");
+    bytes = Buffer.concat(chunks);
     const key = `${owner}/${name}/${filename}`;
-    await putObject(key, Buffer.concat(chunks), "application/octet-stream", "public, max-age=31536000, immutable");
+    await putObject(key, bytes, "application/octet-stream", "public, max-age=31536000, immutable");
   }
 
   await sql`
@@ -247,95 +264,29 @@ export async function POST(req: Request, ctx: { params: Promise<{ target?: strin
             ${sql.json(meta.volumes)}, ${sql.json(meta.links)}, ${sql.json(meta.dependencies)}, ${sql.json(meta.apps)})`;
   await sql`INSERT INTO events (kind, owner, name, version) VALUES ('push', ${owner}, ${name}, ${version})`;
 
-  // regenerate this package's index + the owner's catalog — reads stay static
-  // index.json lists ONLY stored files — a phantom filename here would
-  // lure the resolver into a guaranteed 404; URL versions live in the
-  // catalogs, which carry their absolute origin
-  const files = await sql`
-    SELECT v.filename FROM versions v
-    JOIN packages p ON p.id = v.package_id
-    WHERE p.owner = ${owner} AND p.name = ${name} AND v.origin IS NULL
-    ORDER BY v.filename`;
-  await putObject(
-    `${owner}/${name}/index.json`,
-    JSON.stringify(files.map((f) => f.filename)),
-    "application/json",
-    "public, max-age=60",
-  );
-  const catalog = await sql`
-    SELECT p.name, p.type, p.description, p.license, p.homepage,
-           v.version, v.filename, v.arch, v.bytes, v.created_at, v.origin, v.sha256,
-           v.volumes, v.links, v.dependencies, v.apps
-    FROM packages p JOIN versions v ON v.package_id = p.id
-    WHERE p.owner = ${owner}
-    ORDER BY p.name, v.filename`;
-  const byName = new Map<string, { namespace: string; owner: string; name: string; type: string; description: string; license: string; homepage: string; versions: object[] }>();
-  for (const row of catalog) {
-    if (!byName.has(row.name)) {
-      byName.set(row.name, {
-        namespace: owner, owner, name: row.name, type: row.type,
-        description: row.description, license: row.license, homepage: row.homepage,
-        versions: [],
-      });
-    }
-    // src is the v2 canonical location — ALWAYS a full, http-fetchable URL:
-    // the origin for URL versions, the registry URL for stored bytes (an
-    // image, or the stack's toml). img/path/url are kept alongside it so the
-    // current site reader still works. A stack has no image of its own.
-    const isStackRow = row.type === "stack";
-    const src = row.origin ?? `https://registry.plybox.sh/${owner}/${row.name}/${row.filename}`;
-    const v: Record<string, unknown> = {
-      version: row.version,
-      img: isStackRow ? null : row.filename,
-      ...(isStackRow ? {} : { arch: row.arch }),
-      src,
-      ...(row.origin ? { url: row.origin } : { path: `${owner}/${row.name}/${row.filename}` }),
-      sha256: row.sha256,
-      bytes: Number(row.bytes), pushed_at: row.created_at,
-    };
-    if (Array.isArray(row.volumes) && row.volumes.length) v.volumes = row.volumes;
-    if (Array.isArray(row.links) && row.links.length) v.links = row.links;
-    if (Array.isArray(row.dependencies) && row.dependencies.length) v.dependencies = row.dependencies;
-    if (Array.isArray(row.apps) && row.apps.length) v.apps = row.apps;
-    byName.get(row.name)!.versions.push(v);
+  // v3 bridge (one release): a manifest-less record so the catalog files —
+  // now generated from records only — still list this version. The backfill
+  // script fills manifest_toml in; the page says "re-push with ply ≥ 0.1.70".
+  // A legacy STACK push is the one exception: its uploaded body IS the
+  // stack's toml, so its bridge record carries a real manifest from the
+  // start rather than staying manifest-less like an image push.
+  const existing = await loadRecord(sql, owner, name, version);
+  const artifact = isStack ? [] : [{ arch: arch as "x64" | "arm64", src: origin?.url ?? `${REGISTRY}/${owner}/${name}/${filename}`, sha256, bytes: total, verified: !origin }];
+  const merged = existing ? [...existing.artifacts.filter((a) => a.arch !== arch), ...artifact] : artifact;
+  let stackTomlText = "";
+  let stackManifest: Record<string, unknown> = {};
+  if (isStack && bytes) {
+    stackTomlText = bytes.toString("utf8");
+    try { stackManifest = manifestJson(stackTomlText); } catch { stackTomlText = ""; stackManifest = {}; }
   }
-  const ownerPkgs = [...byName.values()];
-  await putObject(
-    `${owner}/state.json`,
-    JSON.stringify({ updated: new Date().toISOString(), packages: ownerPkgs }, null, 1),
-    "application/json",
-    "public, max-age=60",
-  );
-
-  // The root catalog (browse page, `ply search` default) carries every
-  // namespace. Each push replaces ONLY its own namespace's entries and
-  // preserves the rest — the git pipeline owns apps/ and ply/ the same
-  // way — serialized by an advisory lock so concurrent pushes can't
-  // lose each other's merge.
-  await sql.begin(async (tx) => {
-    await tx`SELECT pg_advisory_xact_lock(771600)`;
-    type Pkg = { namespace?: string; name?: string; versions?: { bytes?: number; version?: string }[] };
-    let root: { packages?: Pkg[] } = {};
-    try {
-      root = JSON.parse((await getObject("state.json")) ?? "{}");
-    } catch { /* first ever state: start empty */ }
-    const kept = (root.packages ?? []).filter((p) => p.namespace !== owner);
-    const packages = [...kept, ...(ownerPkgs as Pkg[])].sort((a, b) =>
-      a.namespace === b.namespace
-        ? (a.name ?? "").localeCompare(b.name ?? "")
-        : (a.namespace ?? "").localeCompare(b.namespace ?? ""));
-    const snapshot = {
-      ...root,
-      updated: new Date().toISOString().replace(/\.\d+Z$/, "Z"),
-      package_count: packages.length,
-      image_count: packages.reduce((n, p) => n + (p.versions?.length ?? 0), 0),
-      total_bytes: packages.reduce((n, p) => n + (p.versions ?? []).reduce((m, v) => m + (v.bytes ?? 0), 0), 0),
-      packages,
-    };
-    // 30s, not 300: this file is rewritten on every push, and its TTL is how
-  // long a just-published package stays invisible to every reader.
-  await putObject("state.json", JSON.stringify(snapshot, null, 1), "application/json", "public, max-age=30");
-  });
+  await saveRecord(sql, {
+    package_id: pkg.id, version, type: meta.type as "app" | "layer" | "stack",
+    manifest_toml: isStack ? stackTomlText : (existing?.manifest_toml ?? ""),
+    manifest: isStack ? stackManifest : (existing?.manifest ?? {}),
+    published_by: user.id,
+  }, merged);
+  if (!origin && !isStack) await sql`INSERT INTO uploads (key, sha256, bytes, user_id) VALUES (${`${owner}/${name}/${filename}`}, ${sha256}, ${total}, ${user.id}) ON CONFLICT (key) DO NOTHING`;
+  await writeCatalogFiles(sql, owner, name);
 
   return NextResponse.json({
     ok: true,

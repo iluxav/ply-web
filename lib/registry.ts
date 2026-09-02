@@ -15,20 +15,19 @@ export type RegistryVersion = {
   pushed_at: string;
   volumes?: string[];
   links?: string[];
-  dependencies?: { name: string; version: string }[];
-  apps?: StackApp[]; // for a stack version: the run sequence
-};
-
-// A stack member, as the catalog records it (mirrors a `[[app]]` block).
-export type StackApp = {
-  run: string;
-  name?: string;
-  e?: string[];
-  after?: string[];
-  publish?: string[];
-  volume?: string[];
-  domain?: string[];
-  scale?: number;
+  // v3: an object of name -> range. v2 (pre-transition) recorded an array
+  // of {name, version} instead; both shapes render until the catalog turns
+  // over. See `depsOf`, which normalizes either into the array form.
+  dependencies?: Record<string, string> | { name: string; version: string }[];
+  // manifest is the URL of the published ply.toml this version was derived
+  // from — "the manifest is the record." Absent for a legacy (pre-v3) entry
+  // that has no manifest to point at.
+  manifest?: string;
+  // false only for a legacy artifact whose bytes/sha256 came from the
+  // publisher's own report rather than a manifest ply verified itself.
+  verified?: boolean;
+  publish?: string;
+  params?: Record<string, unknown>;
 };
 
 // The download/fetch location for a version: the v2 `src` when present, else
@@ -141,3 +140,46 @@ export const fmtSize = (b: number) =>
   : b >= 1 << 30 ? (b / (1 << 30)).toFixed(2) + " GiB"
   : b >= 1 << 20 ? (b / (1 << 20)).toFixed(1) + " MiB"
   : Math.round(b / 1024) + " KiB";
+
+// A param declaration, as `derive()` records it in state.json, is either a
+// plain default (string), a computed default (a string containing `{...}`
+// interpolation), or a secret marker `{ secret: true, external?: boolean }`.
+// A secret's value is never in state.json to begin with — this type just
+// makes "no value" explicit at the render site too.
+export type ParamRow = {
+  name: string;
+  kind: "default" | "computed" | "secret (minted)" | "secret (external)";
+  value?: string;
+};
+
+export function paramRows(
+  params: Record<string, unknown> | undefined,
+): ParamRow[] {
+  return Object.entries(params ?? {})
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([name, v]) => {
+      if (typeof v === "string")
+        return v.includes("{")
+          ? { name, kind: "computed" as const, value: v }
+          : { name, kind: "default" as const, value: v };
+      const t = (v ?? {}) as { secret?: boolean; external?: boolean };
+      return {
+        name,
+        kind: t.external
+          ? ("secret (external)" as const)
+          : ("secret (minted)" as const),
+      };
+    });
+}
+
+// Normalizes both dependency shapes (see `RegistryVersion.dependencies`)
+// into the v2 array form the page renders.
+export const depsOf = (
+  v: RegistryVersion,
+): { name: string; version: string }[] =>
+  Array.isArray(v.dependencies)
+    ? v.dependencies
+    : Object.entries(v.dependencies ?? {}).map(([name, version]) => ({
+        name,
+        version,
+      }));
