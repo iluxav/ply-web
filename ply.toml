@@ -7,7 +7,7 @@
 
 [package]
 name = "plybox-web"
-version = "0.4.18"
+version = "0.4.19"
 entrypoint = ["node", ".next/standalone/server.js"]
 include = [".next/standalone/"]
 base = "debian@13"
