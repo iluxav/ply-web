@@ -1,6 +1,6 @@
 # ply — agent guide
 
-> Package, run, scale, wire and deploy applications with ply — the daemonless Linux container runtime where an app is a package, dependencies are declared in ply.toml, and an image is a resolved lockfile. Use this whenever the user mentions ply, ply.toml, `ply build`/`ply run`/`ply deploy`, plybox.sh, or a .img container image; when they want to containerize an app without Docker or a Dockerfile; when they ask about running services on a single VPS or droplet without Kubernetes; or when they are wiring several services together, publishing ports, adding TLS, or importing a Docker image into ply. Also use it when a ply command errored and they want it diagnosed; and when operating a ply host or fleet — deploying via deployment files, checking deploy status, reading the events journal, scaling, rolling back, or diagnosing a failed build on a server.
+> Package, run, scale, wire and deploy applications with ply — the daemonless Linux container runtime where an app is a package, dependencies are declared in ply.toml, and an image is a resolved lockfile. Use this whenever the user mentions ply, ply.toml, `ply build`/`ply run`/`ply deploy`, plybox.sh, or a .img container image; when they want to containerize an app without Docker or a Dockerfile; when they ask about running services on a single VPS or droplet without Kubernetes; or when they are wiring several services together, publishing ports, adding TLS, or importing a Docker image into ply; when they ask what a container may reach on the network (egress policy, audit, enforcement) or how to autoscale without Kubernetes. Also use it when a ply command errored and they want it diagnosed; and when operating a ply host or fleet — deploying via deployment files, checking deploy status, reading the events journal, scaling, rolling back, or diagnosing a failed build on a server.
 
 
 
@@ -85,8 +85,11 @@ ply run myapp-1.2.0-linux-x64.img --scale 4 --publish 8080
 ```
 
 `--publish` is the only thing that claims a host port. The run parent binds
-it and L4-balances across instances — it forked them, so the backend set
-follows launches, crashes and rolling deploys with no discovery or reload.
+it and balances new connections across instances — rootful Linux hands that
+to the kernel (`(kernel dnat)` on the publishing line, no CPU spent in ply);
+rootless, macOS and `127.0.0.1` are relayed by the parent. It forked the
+instances, so the backend set follows launches, crashes and rolling deploys
+with no discovery or reload; an instance joins only once its port accepts.
 
 **Who can reach it is a decision, not a default.** `--publish 5432` binds
 `0.0.0.0`, which on a public host means your database is on the internet:
@@ -194,6 +197,51 @@ none** — a native package never needs them, since `[package] user` drops
 privileges from the parent before rights stripping. Adding capabilities to
 your own manifest is nearly always a sign something else is wrong.
 
+## Outbound policy: the egress contract
+
+What an app may reach is declared in its manifest, enforced per instance,
+and audited to a file — no sidecar, no vendor agent:
+
+```toml
+[network]
+egress = ["api.stripe.com", "*.amazonaws.com", "1.1.1.1"]   # or [] = talks to nobody
+```
+
+The claim alone only audits (`ply egress APP` shows every destination with
+`allowed`/`undeclared`). The operator turns it on: `ply run … --egress
+enforce` or a stack member's `egress = { mode = "enforce" }`; `--egress-allow`
+replaces the list. Under enforce an undeclared name is REFUSED at DNS in
+milliseconds and an undeclared address is dropped; `ply egress APP
+--blocked` lists both, and `egress-blocked` lands in the events journal.
+Rootful Linux only (rootless prints one warning and runs unpoliced);
+`enforce` refuses images that keep `CAP_NET_RAW` (imported Docker images do).
+
+## Autoscaling
+
+The run parent already owns the instance count, so scaling is a manifest
+section, not a daemon:
+
+```toml
+[scale]
+min = 2
+max = 8
+signal = "cpu"            # cpu | memory | net | metric:<name>  (Prometheus text on the first published port)
+target = "70%"            # per instance, 30 s window; "40MB/s" for net, a number for metric
+
+[resources]
+mem = { min = "256M", max = "2G" }   # a RANGE is resized live; a plain "512M" is fixed
+cpu = { min = "0.5", max = "4" }
+```
+
+Up goes straight to `ceil(current × avg / target)` when more than 10 % over;
+down is one instance at a time, only when every instance is below target.
+`ply scale APP N` pins an autoscaled app (policy paused); `ply scale APP
+auto` resumes. Every step is an event with its reason (`scale-up 2 -> 4:
+cpu 84% > 70% over 30s`). Pick custom metrics that mean something over
+seconds (queue depth, rates) — an instantaneous gauge is noise at a 5 s
+sample. Keep-alive connections stick to their instance: new instances take
+load as connections turn over.
+
 ## Debugging
 
 ```sh
@@ -253,10 +301,12 @@ ply run IMAGE [--scale N]
               [--after APP]... [--after-timeout 60s]
               [-e K=V]... [--env-file FILE]
               [--link HOST:CONTAINER]                   # dev bind mount
+              [--egress off|audit|enforce] [--egress-allow ENTRY]...   # outbound policy
               [--privileged]                            # debugging only
 ply ps [--json]
 ply stats [APP|APP.N] [--json]
 ply exec APP[.N] CMD...
+ply egress APP [--follow] [--blocked] [--json]          # the outbound audit log as a table
 ```
 
 `--publish` forms:
@@ -277,10 +327,19 @@ the app's canonical address — what `--after` hands to dependants and what
 `<APP>_HOST` and `<APP>_PORT`. An explicit `[env]` or `-e` wins; an
 unpublished dependency injects nothing.
 
+`--egress` sets the outbound mode over the manifest's `[network] egress`
+claim (default `audit` when declared, else `off`); `--egress-allow`
+(repeatable) replaces the declared list. `ply egress APP` renders the audit
+log: destination, name, port, protocol, packets, first/last seen, verdict
+(`allowed` / `undeclared` / `blocked` / `refused`); `--blocked` keeps
+everything but `allowed`.
+
 ## Lifecycle
 
 ```sh
 ply deploy IMAGE [--timeout S]   # rolling, health-gated, reverts on failure
+ply scale APP N|auto             # N pins (pauses [scale]); auto hands the count back
+ply restart APP                  # rolling restart, health-gated
 ply rebase IMAGE --runtime name@x.y.z   # swap a runtime without rebuilding
 ply rm APP [--volumes]
 ply gc                           # drop store entries nothing references
@@ -476,10 +535,29 @@ cache  = { path = "/var/cache/myapp", ephemeral = true } # GC-able
 Per-instance is the default so scaling can never silently corrupt
 single-writer state. Plain host directories underneath.
 
+## [network]
+
+`egress = [...]` — the outbound claim: hostnames, `*.suffix` wildcards, IPv4
+addresses, CIDRs, or `*`. `[]` means "talks to nobody". Absent = not
+declared. Audit by default once declared; `--egress enforce` (or a stack
+member's `egress = { mode, allow }`) enforces. See the Security docs.
+
+## [scale]
+
+`min`, `max` (required), `signal` = `cpu` | `memory` | `net` | `metric:<name>`,
+`target` (`"70%"` for cpu/memory, `"40MB/s"` for net, a number for a metric),
+optional `cooldown` (default `"60s"`) and `metrics_path` (default
+`/metrics`, Prometheus text, scraped on the first published port). Validated
+at `ply build`; `memory` needs `resources.mem`. The run parent scales
+between min and max; `ply scale APP N` pins, `ply scale APP auto` resumes.
+
 ## [resources]
 
 cgroup v2 limits: `mem = "512M"`, `cpu = "1.5"`, `pids = 256`. `pids` is set
 even when omitted, so a fork bomb is contained with zero configuration.
+`mem` and `cpu` also take a range — `{ min = "256M", max = "2G" }` — which
+the run parent resizes live: grows by half under pressure (or an OOM kill),
+shrinks by a quarter after a cooldown idle.
 
 ## [health]
 
