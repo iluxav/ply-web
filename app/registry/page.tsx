@@ -14,7 +14,8 @@ import {
   type RegistryRow,
 } from "@/components/RegistryTable";
 import { RegistryPagination } from "@/components/RegistryPagination";
-import { CopyButton } from "@/components/CopyButton";
+import { RegistryCode } from "@/components/RegistryUI";
+import styles from "@/components/Registry.module.css";
 import { JsonLd } from "@/components/JsonLd";
 import { pageMetadata, SITE_URL } from "@/lib/site";
 
@@ -109,7 +110,7 @@ function packageRow(pkg: RegistryPackage): RegistryRow {
     description: pkg.description,
     license: pkg.license,
     version: latest.version,
-    architectures,
+    architectures: pkg.type === "stack" ? [] : architectures,
     size: fmtSize(latest.bytes),
   };
 }
@@ -163,51 +164,45 @@ async function RegistryCatalog({
   const rows = packages.slice(start, end).map(packageRow);
 
   return (
-    <section className="mt-12" aria-labelledby="package-index-title">
-      <div className="flex flex-wrap items-end justify-between gap-5">
-        <form action="/registry/" method="get" role="search" className="w-full max-w-xl">
+    <section className={styles.catalog} aria-labelledby="package-index-title">
+        <form action="/registry/" method="get" role="search">
           {filter !== "all" && <input type="hidden" name="f" value={filter} />}
-          <label htmlFor="package-search" className="mb-2 block font-mono text-[10px] uppercase tracking-wider text-fade">
-            Search every package
+          <label htmlFor="package-search" className={styles.searchLabel}>
+            Find a package
           </label>
-          <div className="utility-surface flex border border-edge focus-within:border-accent">
+          <div className={styles.search}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 5 5" /></svg>
             <input
               id="package-search"
               name="q"
               type="search"
               defaultValue={query}
-              placeholder="name, description, version, or license"
+              placeholder="Search name, version, license…"
               autoComplete="off"
-              className="min-h-11 min-w-0 flex-1 bg-transparent px-4 font-mono text-sm text-ink placeholder:text-fade focus:outline-none"
             />
             <button
               type="submit"
-              className="joined-control min-h-11 border-l border-edge px-4 font-mono text-xs text-fade transition-colors hover:text-accent"
             >
-              search
+              Search
             </button>
           </div>
         </form>
 
-        <nav aria-label="Package filters" className="flex flex-wrap items-center gap-1 pb-1 font-mono text-[11px]">
+      <div className={styles.filterBar}>
+        <nav aria-label="Package filters" className={styles.filters}>
           {FILTERS.map((f) => (
             <Link
               key={f}
               href={registryUrl(1, query, f)}
               aria-current={f === filter ? "page" : undefined}
-              className={`inline-flex min-h-9 items-center border px-3 transition-colors ${
-                f === filter
-                  ? "border-accent text-accent"
-                  : "border-edge text-fade hover:border-deep hover:text-ink"
-              }`}
             >
-              {f}
-              <span className="ml-1.5 opacity-60">{countOf(f)}</span>
+              {f === "all" ? "All packages" : f[0].toUpperCase() + f.slice(1)}
+              <span>{countOf(f)}</span>
             </Link>
           ))}
         </nav>
 
-        <div className="flex items-center gap-4 pb-1 font-mono text-[11px] text-fade">
+        <div className={styles.resultCount}>
           <p id="package-index-title">
             {packages.length === 0
               ? "0 packages"
@@ -215,7 +210,7 @@ async function RegistryCatalog({
           </p>
           {(query || filter !== "all") && (
             <Link href="/registry/" className="text-accent hover:underline">
-              clear
+              Clear filters
             </Link>
           )}
         </div>
@@ -227,13 +222,18 @@ async function RegistryCatalog({
           <RegistryPagination page={page} pageCount={pageCount} query={query} filter={filter} />
         </>
       ) : (
-        <div className="mt-6 border-y border-edge py-12 text-center">
-          <p className="text-sm text-fade">No {filter !== "all" ? filter + " " : ""}packages match{query ? ` “${query}”` : " the filter"}.</p>
-          <Link href="/registry/" className="mt-3 inline-flex min-h-11 items-center font-mono text-xs text-accent hover:underline">
-            clear search
+        <div className={styles.empty}>
+          <h3>No matching packages.</h3>
+          <p>Try a different name or version{filter !== "all" ? ", or choose another package type" : ""}.</p>
+          <Link href="/registry/">
+            Clear search & filters →
           </Link>
         </div>
       )}
+      <div className={styles.catalogNote}>
+        <span>Apps run. Layers provide files. Stacks compose apps.</span>
+        <a href="https://registry.plybox.sh/state.json">View raw index ↗</a>
+      </div>
     </section>
   );
 }
@@ -248,12 +248,9 @@ function CatalogFallback() {
 
 export default async function RegistryPage({ searchParams }: RegistryPageProps) {
   const state = await registryState();
-  const stats =
-    `${state.package_count} packages · ${state.image_count} images · ` +
-    `${fmtSize(state.total_bytes)} · updated ${state.updated.slice(0, 16).replace("T", " ")} UTC`;
 
   return (
-    <main className="mx-auto w-full max-w-[1480px] px-5 pb-20 pt-10 sm:px-7 sm:pt-14">
+    <main className={styles.page}>
       <JsonLd
         data={{
           "@context": "https://schema.org",
@@ -272,33 +269,29 @@ export default async function RegistryPage({ searchParams }: RegistryPageProps) 
           },
         }}
       />
-      <div>
-        <div className="max-w-3xl">
-          <p className="eyebrow">official registry</p>
-          <h1 className="mt-3 text-4xl font-medium tracking-[-0.04em] sm:text-5xl">
-            Package registry.
+      <header className={styles.hero}>
+        <div>
+          <p className={styles.eyebrow}>The ply package index</p>
+          <h1>
+            <span className={styles.slash}>/</span>registry<span className={styles.slash}>_</span>
           </h1>
-          <p className="mt-4 max-w-2xl text-base leading-7 text-fade">
-            Content-addressed images served as ordinary files. Search the catalog,
-            lock a digest, and fetch it from any mirror.
+          <p className={styles.intro}>
+            Small pieces. Your composition.<br />
+            Discover apps, runtimes, and libraries. Pin what you need.
+            Everything ships as a file.
           </p>
-          <p className="mt-4 font-mono text-[11px] text-fade">{stats}</p>
         </div>
 
-        <div className="utility-surface mt-7 flex max-w-3xl items-center border border-edge">
-          <span className="hidden shrink-0 border-r border-edge px-3 font-mono text-[10px] uppercase tracking-wider text-fade sm:inline-flex sm:min-h-11 sm:items-center">
-            source
-          </span>
-          <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap px-4 font-mono text-xs text-accent">
-            {DEFAULT_SOURCE}
-          </code>
-          <CopyButton
-            value={`[sources]\n${DEFAULT_SOURCE}`}
-            label="copy registry source"
-            iconOnly
-            className="joined-control shrink-0 border-y-0 border-r-0"
-          />
+        <div className={styles.source}>
+          <RegistryCode title="ply.toml / registry source" value={`[sources]\n${DEFAULT_SOURCE}`} />
+          <p>One source. Ordinary HTTP. <Link href="/docs/quickstart/">Get started →</Link></p>
         </div>
+      </header>
+      <div className={styles.stats}>
+        <span><strong>{state.package_count}</strong> packages</span>
+        <span><strong>{state.image_count}</strong> images</span>
+        <span><strong>{fmtSize(state.total_bytes)}</strong> total</span>
+        <span className={styles.updated}>Index updated {state.updated.slice(0, 16).replace("T", " ")} UTC</span>
       </div>
 
       <Suspense fallback={<CatalogFallback />}>

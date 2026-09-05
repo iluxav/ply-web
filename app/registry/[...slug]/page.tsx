@@ -21,7 +21,8 @@ import {
   runExample,
   stackMembers,
 } from "@/lib/package-page";
-import { CopyButton } from "@/components/CopyButton";
+import { PackageBadge, PackageMark, RegistryCode, RegistrySection } from "@/components/RegistryUI";
+import styles from "@/components/Registry.module.css";
 import { JsonLd } from "@/components/JsonLd";
 import { absoluteUrl, pageMetadata, SITE_URL } from "@/lib/site";
 
@@ -29,6 +30,7 @@ function packageSummary(pkg: RegistryPackage) {
   if (pkg.description) return pkg.description;
   const latest = pkg.versions.at(-1);
   if (!latest) return `${pkg.name} in the official ply package registry.`;
+  if (pkg.type === "stack") return `${pkg.name} ${latest.version} — an app composition defined in a plain TOML manifest. Inspect its members or run it with ply up.`;
   const architectures = [
     ...new Set(
       pkg.versions
@@ -63,7 +65,7 @@ export default async function PackagePage({
   const { slug } = await params;
   const state = await registryState();
   const p = findPackage(state, slug);
-  if (!p) notFound();
+  if (!p || p.versions.length === 0) notFound();
 
   const latest = p.versions[p.versions.length - 1];
   const range = latest.version.split(".").slice(0, 2).join(".");
@@ -90,9 +92,12 @@ export default async function PackagePage({
   const showDependencyExample = p.type !== "stack";
   const hasExamples = Boolean(runLine) || Boolean(memberBlock) || showDependencyExample;
   const members = stackMembers(manifest);
+  const parameters = paramRows(latest.params);
+  const dependencies = depsOf(latest);
+  const hasExternalBuilds = p.versions.some((version) => version.verified === false);
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-5 pb-20 pt-10 sm:px-7 sm:pt-14">
+    <main className={styles.page}>
       <JsonLd
         data={{
           "@context": "https://schema.org",
@@ -107,7 +112,7 @@ export default async function PackagePage({
               applicationCategory: "DeveloperApplication",
               operatingSystem: "Linux",
               softwareVersion: latest.version,
-              softwareRequirements: `Linux on ${architectures.join(" or ")}`,
+              softwareRequirements: p.type === "stack" ? "ply on Linux" : `Linux on ${architectures.join(" or ")}`,
               downloadUrl: latestBuilds.map(srcOf).filter(Boolean),
               license: p.license || undefined,
               isPartOf: { "@id": `${SITE_URL}/registry/#catalog` },
@@ -138,158 +143,164 @@ export default async function PackagePage({
           ],
         }}
       />
-      <p className="font-mono text-xs text-fade">
-        <Link href="/registry/" className="hover:text-accent">packages</Link> / {p.namespace}
-      </p>
-      <h1 className="mt-4 text-4xl font-medium tracking-[-0.04em] sm:text-5xl">{p.name}</h1>
-      <p className="mt-4 max-w-2xl text-lg leading-8 text-fade">{description}</p>
-      <p className="mt-4 font-mono text-xs text-fade">
-        {p.license && <span className="mr-4">license: {p.license}</span>}
-        {p.homepage && (
-          <a href={p.homepage} className="text-accent hover:underline">{p.homepage}</a>
-        )}
-      </p>
-      {p.alpine && (
-        <p className="mt-2 font-mono text-xs text-fade">
-          unmodified Alpine Linux {p.alpine.branch} build ·{" "}
-          <a href={alpineLinks(p.alpine).package} className="text-accent hover:underline">
-            package
-          </a>{" "}
-          ·{" "}
-          <a href={alpineLinks(p.alpine).source} className="text-accent hover:underline">
-            source (aports)
-          </a>
-        </p>
-      )}
 
-      {hasExamples && (
-        <>
-          <h2 className="mt-10 font-mono text-[10px] uppercase tracking-wider text-fade">examples</h2>
-          {runLine && (
-            <div className="utility-surface mt-2 flex items-stretch border border-edge">
-              <pre className="min-w-0 flex-1 overflow-x-auto px-4 py-3 font-mono text-sm leading-6"><code>
-                <span className="text-accent">{runLine}</span>
-              </code></pre>
-              <CopyButton value={runLine} className="joined-control shrink-0 border-y-0 border-r-0" />
-            </div>
+      <nav aria-label="Breadcrumb" className={styles.breadcrumbs}>
+        <Link href="/registry/">registry</Link><span aria-hidden="true">/</span>
+        <span>{p.namespace}</span><span aria-hidden="true">/</span>
+        <span aria-current="page">{p.name}</span>
+      </nav>
+      <header className={styles.packageHero}>
+        <div className="min-w-0">
+          <div className={styles.packageTags}>
+            <PackageBadge type={p.type ?? "layer"} />
+            <span>{p.namespace === "ply" ? "ply namespace" : "community package"}</span>
+            <span>v{latest.version}</span>
+          </div>
+          <div className={styles.packageTitle}>
+            <PackageMark type={p.type ?? "layer"} />
+            <h1>{p.name}</h1>
+          </div>
+          <p className={styles.intro}>{description}</p>
+        </div>
+        <Link href="/registry/" className={styles.backLink}>← All packages</Link>
+      </header>
+      <nav aria-label="Package sections" className={styles.detailNav}>
+        {hasExamples && <a href="#usage">Usage</a>}
+        {members.length > 0 && <a href="#members">Composition</a>}
+        {p.type !== "stack" && parameters.length > 0 && <a href="#parameters">Parameters</a>}
+        {dependencies.length > 0 && <a href="#dependencies">Dependencies</a>}
+        {manifestText && <a href="#manifest">Manifest</a>}
+        <a href="#versions">Versions <span className="ml-2 text-fade">{p.versions.length}</span></a>
+      </nav>
+      <div className={styles.detailGrid}>
+        <div className={styles.detailContent}>
+          {hasExamples && (
+            <RegistrySection id="usage" title="Use this package" meta={p.type === "stack" ? "compose / run" : "copy / configure"}>
+              <p className={styles.help}>
+                {p.type === "stack"
+                  ? "Run the published composition with ply up."
+                  : p.type === "app" && runLine
+                    ? "Run the app directly or compose it with other apps in your manifest."
+                    : "Add this independent package to your manifest. ply resolves and pins its contents in the lockfile."}
+              </p>
+              {runLine && <RegistryCode title="terminal" value={runLine} note={runLine.includes("=…") ? "Replace … with your secret value before running." : undefined} />}
+              {memberBlock && <RegistryCode title="ply.toml / app member" value={memberBlock} />}
+              {showDependencyExample && <RegistryCode title="ply.toml / dependencies" value={"[dependencies]\n" + dependency} />}
+            </RegistrySection>
           )}
-          {memberBlock && (
-            <div className="utility-surface mt-2 flex items-stretch border border-edge">
-              <pre className="min-w-0 flex-1 overflow-x-auto px-4 py-3 font-mono text-sm leading-6"><code>
-                <span className="text-accent whitespace-pre">{memberBlock}</span>
-              </code></pre>
-              <CopyButton value={memberBlock} className="joined-control shrink-0 border-y-0 border-r-0" />
-            </div>
-          )}
-          {showDependencyExample && (
-            <div className="utility-surface mt-2 flex items-stretch border border-edge">
-              <pre className="min-w-0 flex-1 overflow-x-auto px-4 py-3 font-mono text-sm leading-6"><code>
-                <span className="text-fade">[dependencies]</span>{"\n"}
-                <span className="text-accent">{dependency}</span>
-              </code></pre>
-              <CopyButton value={`[dependencies]\n${dependency}`} className="joined-control shrink-0 border-y-0 border-r-0" />
-            </div>
-          )}
-        </>
-      )}
 
-      {p.type === "stack" ? (
-        members.length > 0 && (
-          <>
-            <h2 className="mt-10 font-mono text-[10px] uppercase tracking-wider text-fade">members</h2>
-            <div className="mt-2 overflow-x-auto border border-edge">
-              <table className="w-full min-w-2xl text-sm">
-                <thead className="sr-only">
-                  <tr><th>Member</th><th>Run</th><th>Params</th><th>References</th><th>Publish</th><th>After</th></tr>
-                </thead>
+          {p.type === "stack" && members.length > 0 && (
+            <RegistrySection id="members" title="Composition" meta={members.length + " app members"}>
+              <p className={styles.help}>Independent apps, connected through explicit parameters and references.</p>
+              <div className={styles.memberList}>
+                {members.map((m, index) => (
+                  <article key={m.name + "-" + index} className={styles.member}>
+                    <header><PackageMark type="app" /><h3>{m.name}</h3><code>{m.run}</code></header>
+                    <dl>
+                      {Object.keys(m.params).length > 0 && <><dt>params</dt><dd>{Object.entries(m.params).map(([k, v]) => k + " = " + JSON.stringify(v)).join(", ")}</dd></>}
+                      {m.refs.length > 0 && <><dt>references</dt><dd>{m.refs.join(", ")}</dd></>}
+                      {m.publish.length > 0 && <><dt>publish</dt><dd>{m.publish.join(", ")}</dd></>}
+                      {m.after.length > 0 && <><dt>after</dt><dd>{m.after.join(", ")}</dd></>}
+                    </dl>
+                  </article>
+                ))}
+              </div>
+            </RegistrySection>
+          )}
+
+          {p.type !== "stack" && parameters.length > 0 && (
+            <RegistrySection id="parameters" title="Parameters" meta={parameters.length + " declared"}>
+              <p className={styles.help}>
+                Reference as <code>{"{" + p.name + ".<name>}"}</code> from a stack.
+                Override with <code>{'params = { <name> = "…" }'}</code>.
+              </p>
+              <div className={styles.dataFrame} tabIndex={0} role="region" aria-label="Package parameters">
+                <table className={styles.dataTable}>
+                  <thead><tr><th scope="col">name</th><th scope="col">kind</th><th scope="col">default / expression</th></tr></thead>
+                  <tbody>{parameters.map((r) => (
+                    <tr key={r.name}><td>{r.name}</td><td className={styles.muted}>{r.kind}</td><td>{r.value ?? "—"}</td></tr>
+                  ))}</tbody>
+                </table>
+              </div>
+              <p className={styles.footnote}>Secrets are minted per stack unless declared external. Secret values are not shown.</p>
+            </RegistrySection>
+          )}
+
+          {dependencies.length > 0 && (
+            <RegistrySection id="dependencies" title="Dependencies" meta={dependencies.length + " packages"}>
+              <p className={styles.help}>Declared package requirements. Composed together, not inherited.</p>
+              <div className={styles.dependencyList}>
+                {dependencies.map((d) => (
+                  <div key={d.name + "-" + d.version} className={styles.dependency}>
+                    <code>{d.name}</code><span>{d.version}</span>
+                  </div>
+                ))}
+              </div>
+            </RegistrySection>
+          )}
+
+          {manifestText && (
+            <RegistrySection id="manifest" title="The manifest" meta="as published">
+              <details className={styles.manifest}>
+                <summary>Read ply.toml</summary>
+                <pre tabIndex={0} aria-label="Published ply.toml"><code>{manifestText}</code></pre>
+              </details>
+            </RegistrySection>
+          )}
+
+          <RegistrySection id="versions" title={p.type === "stack" ? "Published versions" : "Published builds"} meta={p.versions.length + (p.versions.length === 1 ? " record" : " records")}>
+            <p className={styles.help}>
+              {p.type === "stack" ? "Download the composition manifest for a published version." : "Download a package file for your architecture."}
+            </p>
+            <div className={styles.dataFrame} tabIndex={0} role="region" aria-label="Published builds">
+              <table className={styles.dataTable}>
+                <thead><tr><th scope="col">version</th><th scope="col">download</th><th scope="col">size</th><th scope="col">published</th>{hasExternalBuilds && <th scope="col">hosting</th>}</tr></thead>
                 <tbody>
-                  {members.map((m) => (
-                    <tr key={m.name} className="border-b border-edge last:border-b-0">
-                      <td className="whitespace-nowrap px-4 py-2 font-mono">{m.name}</td>
-                      <td className="whitespace-nowrap px-4 py-2 font-mono text-xs text-fade">{m.run}</td>
-                      <td className="px-4 py-2 font-mono text-xs">
-                        {Object.entries(m.params).map(([k, v]) => `${k} = "${v}"`).join(", ")}
-                      </td>
-                      <td className="px-4 py-2 font-mono text-xs text-fade">{m.refs.join(", ")}</td>
-                      <td className="whitespace-nowrap px-4 py-2 font-mono text-xs text-fade">{m.publish.join(", ")}</td>
-                      <td className="whitespace-nowrap px-4 py-2 font-mono text-xs text-fade">{m.after.join(", ")}</td>
+                  {[...p.versions].reverse().map((v, index) => (
+                    <tr key={v.version + "-" + archOf(v) + "-" + index}>
+                      <td className={styles.version}>{v.version}{v.version === latest.version && <small>latest</small>}</td>
+                      <td>{srcOf(v) ? <a href={srcOf(v)} className={styles.download} aria-label={"Download " + p.name + " " + v.version + " " + (p.type === "stack" ? "manifest" : archOf(v))}>{p.type === "stack" ? "ply.toml" : archOf(v)} <span aria-hidden="true">↓</span></a> : <span className={styles.muted}>unavailable</span>}</td>
+                      <td className="whitespace-nowrap">{fmtSize(v.bytes)}</td>
+                      <td className={styles.muted + " whitespace-nowrap"}>{v.pushed_at?.slice(0, 10) || "—"}</td>
+                      {hasExternalBuilds && <td className={styles.muted}>{v.verified === false ? <span title="Bytes hosted by the publisher; sha256 reported by their ply">external</span> : "—"}</td>}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          </>
-        )
-      ) : (
-        paramRows(latest.params).length > 0 && (
-          <>
-            <h2 className="mt-10 font-mono text-[10px] uppercase tracking-wider text-fade">params</h2>
-            <p className="mt-1 font-mono text-xs text-fade">reference as {"{"}{p.name}.&lt;name&gt;{"}"} from a stack; set with params = {"{ <name> = \"…\" }"}</p>
-            <div className="mt-2 overflow-x-auto border border-edge">
-              <table className="w-full text-sm">
-                <tbody>
-                  {paramRows(latest.params).map((r) => (
-                    <tr key={r.name} className="border-b border-edge last:border-b-0">
-                      <td className="whitespace-nowrap px-4 py-2 font-mono">{r.name}</td>
-                      <td className="px-4 py-2 font-mono text-xs text-fade">{r.kind}</td>
-                      <td className="px-4 py-2 font-mono text-xs">{r.value ?? ""}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <p className="mt-2 font-mono text-xs text-fade">set with params = {"{ … }"}; secrets are minted per stack unless external</p>
-          </>
-        )
-      )}
-      {(latest.publish || latest.volumes?.length || depsOf(latest).length > 0) && (
-        <p className="mt-6 font-mono text-xs text-fade">
-          {latest.publish && <span className="mr-4">publish: {latest.publish}</span>}
-          {latest.volumes?.length ? <span className="mr-4">volumes: {latest.volumes.join(", ")}</span> : null}
-          {depsOf(latest).length > 0 && <span>depends on: {depsOf(latest).map((d) => `${d.name} ${d.version}`).join(", ")}</span>}
-        </p>
-      )}
-      {latest.manifest && (
-        <p className="mt-2 font-mono text-xs text-fade">
-          <a href={latest.manifest} className="text-accent hover:underline">ply.toml</a> — the manifest as published
-        </p>
-      )}
-      {manifestText && (
-        <details className="mt-6 border border-edge">
-          <summary className="cursor-pointer px-4 py-2 font-mono text-xs text-fade">ply.toml (as published)</summary>
-          <pre className="overflow-x-auto border-t border-edge px-4 py-3 font-mono text-xs leading-6">{manifestText}</pre>
-        </details>
-      )}
+          </RegistrySection>
+        </div>
 
-      <h2 className="mt-10 font-mono text-[10px] uppercase tracking-wider text-fade">versions</h2>
-      <div className="mt-2 overflow-x-auto border border-edge">
-      <table className="w-full min-w-lg text-sm">
-        <thead className="sr-only">
-          <tr><th>Version</th><th>Architecture</th><th>Verified</th><th>Size</th><th>Published</th></tr>
-        </thead>
-        <tbody>
-          {[...p.versions].reverse().map((v) => (
-            <tr key={`${v.version}-${archOf(v)}`} className="border-b border-edge last:border-b-0">
-              <td className="whitespace-nowrap px-4 py-3 font-mono">{v.version}</td>
-              <td className="px-4 py-2">
-                <a
-                  href={srcOf(v)}
-                  className="secondary-action inline-flex min-h-8 items-center border border-edge px-2 font-mono text-[10px] text-fade transition-colors hover:border-accent hover:text-accent"
-                >
-                  {archOf(v)}
-                </a>
-              </td>
-              <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-fade">
-                {v.verified === false ? <span title="bytes hosted by the publisher; sha256 reported by their ply">external</span> : ""}
-              </td>
-              <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-fade">{fmtSize(v.bytes)}</td>
-              <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-fade">
-                {v.pushed_at?.slice(0, 10)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+        <aside className={styles.sidebar} aria-label="Package information">
+          <h2>Package record</h2>
+          <dl className={styles.metadata}>
+            <div><dt>namespace</dt><dd>{p.namespace}</dd></div>
+            <div><dt>latest version</dt><dd>{latest.version}</dd></div>
+            <div><dt>{p.type === "stack" ? "format" : "platform"}</dt><dd>{p.type === "stack" ? "TOML composition" : "Linux / " + architectures.join(" / ")}</dd></div>
+            {p.type !== "stack" && <div><dt>package size · {archOf(latest)}</dt><dd>{fmtSize(latest.bytes)}</dd></div>}
+            <div><dt>last published</dt><dd>{latest.pushed_at?.slice(0, 10) || "—"}</dd></div>
+            <div><dt>license</dt><dd>{p.license || "Not specified"}</dd></div>
+            {latest.publish && <div><dt>publish</dt><dd>{latest.publish}</dd></div>}
+            {Boolean(latest.volumes?.length) && <div><dt>volumes</dt><dd>{latest.volumes?.map((v) => <div key={v}>{v}</div>)}</dd></div>}
+          </dl>
+          {(p.homepage || latest.manifest || p.alpine) && (
+            <div className={styles.sidebarBlock}>
+              <h3>Sources & provenance</h3>
+              {p.homepage && <a href={p.homepage}>Project homepage ↗</a>}
+              {latest.manifest && <a href={latest.manifest}>Published ply.toml ↗</a>}
+              {p.alpine && <>
+                <p>Unmodified Alpine Linux {p.alpine.branch} build.</p>
+                <a href={alpineLinks(p.alpine).package}>Alpine package ↗</a>
+                <a href={alpineLinks(p.alpine).source}>Source (aports) ↗</a>
+              </>}
+            </div>
+          )}
+          <div className={styles.sidebarBlock}>
+            <h3>Files, not a service.</h3>
+            <p>Inspect the manifest. Pin your dependencies. Run with no daemon in between.</p>
+            <Link href="/docs/dependencies/">How ply composes packages →</Link>
+          </div>
+        </aside>
       </div>
     </main>
   );

@@ -1,7 +1,12 @@
+import Link from "next/link";
+import styles from "@/components/Registry.module.css";
+
 export default function Loading() {
   return (
-    <main className="mx-auto w-full max-w-3xl px-5 pb-20 pt-14 sm:px-7">
-      <p className="font-mono text-sm text-fade">resolving package metadata…</p>
+    <main className={styles.page} aria-busy="true">
+      <div className={styles.breadcrumbs}><Link href="/registry/">← Registry</Link></div>
+      <p className={styles.eyebrow} role="status">Resolving package metadata…</p>
+      <div className={styles.loading} aria-hidden="true"><span /><span /><span /></div>
     </main>
   );
 }

@@ -1,0 +1,81 @@
+.home { max-width: 1240px; margin: 0 auto; padding: 0 40px; }
+.hero { display: grid; grid-template-columns: 1.12fr 1fr; gap: 62px; align-items: center; padding: 76px 0 65px; }
+.heroCopy { min-width: 0; }
+.kicker { font: 10px/1.6 var(--font-mono); letter-spacing: .13em; color: var(--color-fade); display: flex; align-items: center; gap: 9px; }
+.statusDot { width: 6px; height: 6px; background: var(--color-accent); border-radius: 50%; box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-accent) 5%, transparent); }
+.hero h1 { font-size: clamp(58px, 6.25vw, 83px); letter-spacing: -.065em; line-height: 1.02; font-weight: 500; margin: 25px 0 27px; }
+.hero h1 > span { color: var(--color-accent); }
+.heroLead { font-size: 23px; line-height: 1.45; letter-spacing: -.025em; }
+.heroDescription { color: var(--color-fade); max-width: 400px; margin-top: 16px; font-size: 15px; line-height: 1.8; }
+.heroActions { display: flex; align-items: center; gap: 27px; margin-top: 28px; }
+.primaryButton { display: inline-flex; align-items: center; justify-content: space-between; gap: 35px; padding: 14px 20px; min-height: 48px; border-radius: 4px; background: var(--color-accent); color: var(--color-ground); font: 12px var(--font-mono); font-weight: 600; transition: background .2s, transform .2s; }
+.primaryButton:hover { background: var(--color-accent-hover); transform: translateY(-2px); }
+.primaryButton > span { font-size: 18px; line-height: 1; }
+.textLink { display: inline-flex; align-items: center; gap: 13px; font: 11px/1.5 var(--font-mono); transition: color .2s; }
+.textLink:hover { color: var(--color-accent); }
+.install { display: flex; align-items: center; gap: 10px; margin-top: 30px; padding: 5px 6px 5px 13px; border: 1px solid var(--color-edge); border-radius: 4px; background: var(--color-card); }
+.install code { min-width: 0; overflow-x: auto; white-space: nowrap; font: 10px/2 var(--font-mono); }
+.prompt { color: var(--color-fade); font: 11px var(--font-mono); }
+.install .copyButton { margin-left: auto; border: 0; flex-shrink: 0; width: 32px; min-height: 32px; }
+.compatibility { color: var(--color-fade); display: flex; align-items: center; gap: 11px; font: 9px var(--font-mono); margin-top: 12px; }
+.compatibility > span { color: var(--color-edge); }
+.primitives { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 25px 0; border-top: 1px solid var(--color-edge); border-bottom: 1px solid var(--color-edge); font: 11px var(--font-mono); }
+.primitivesLabel { font-size: 8px; line-height: 1.9; letter-spacing: .12em; color: var(--color-fade); }
+.primitivesLabel strong { font-weight: 400; color: var(--color-ink); }
+.primitives i { font-style: normal; color: var(--color-sage); padding-right: 7px; }
+.workflow { padding: 92px 0 80px; }
+.sectionHeading { display: flex; justify-content: space-between; gap: 35px; align-items: flex-end; margin-bottom: 38px; }
+.sectionHeading h2 { font-size: clamp(34px, 3.4vw, 45px); font-weight: 400; line-height: 1.15; letter-spacing: -.045em; margin-top: 16px; }
+.sectionHeading h2 code { color: var(--color-accent); font-weight: 400; font-size: .94em; }
+.sectionHeading > p { color: var(--color-fade); font-size: 14px; line-height: 1.9; padding-bottom: 3px; }
+.workbench { display: grid; grid-template-columns: 1fr 1fr; gap: 58px; align-items: stretch; }
+.manifest { border: 1px solid var(--color-edge); border-radius: 6px; background: var(--color-card); min-width: 0; overflow: hidden; }
+.fileBar { padding: 15px 20px; border-bottom: 1px solid var(--color-edge); display: flex; justify-content: space-between; font: 10px var(--font-mono); }
+.fileBar > span:first-child { display: flex; align-items: center; gap: 9px; }
+.fileBar > span:last-child { color: var(--color-fade); font-size: 8px; }
+.manifest pre { overflow-x: auto; font: 11px/1.95 var(--font-mono); padding: 22px; }
+.comment { color: var(--color-fade); }
+.syntax { color: var(--color-accent); }
+.string { color: var(--color-ink); }
+.fileFoot { display: flex; justify-content: space-between; gap: 12px; border-top: 1px dashed var(--color-edge); padding: 13px 20px; font: 8px/1.6 var(--font-mono); color: var(--color-fade); }
+.fileFoot > span { color: var(--color-ink); }
+.steps { display: flex; flex-direction: column; justify-content: space-between; padding: 4px 0; }
+.steps li { display: flex; gap: 21px; position: relative; padding-bottom: 25px; }
+.steps li:last-child { padding-bottom: 0; }
+.steps li:not(:last-child)::after { content: ""; width: 1px; position: absolute; left: 15px; top: 42px; bottom: 12px; background: var(--color-edge); }
+.stepNumber { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex-shrink: 0; border: 1px solid var(--color-edge); border-radius: 50%; font: 9px var(--font-mono); color: var(--color-accent); }
+.steps li > div { min-width: 0; }
+.steps h3 { font-size: 17px; letter-spacing: -.02em; margin: 3px 0 11px; }
+.steps code { display: block; font: 11px/1.8 var(--font-mono); overflow-x: auto; white-space: nowrap; }
+.steps code span { color: var(--color-accent); margin-right: 4px; }
+.steps p { font-size: 12px; line-height: 1.8; color: var(--color-fade); margin-top: 7px; }
+.workflowFoot { display: flex; justify-content: space-between; gap: 20px; margin-top: 25px; color: var(--color-fade); font: 9px/1.7 var(--font-mono); }
+.workflowFoot > span > span { color: var(--color-accent); margin-right: 5px; }
+.workflowFoot .textLink { color: var(--color-ink); font-size: 10px; }
+.philosophy { border-top: 1px solid var(--color-edge); padding: 75px 0; }
+.principles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; padding-top: 10px; }
+.principles article { display: flex; flex-direction: column; align-items: flex-start; }
+.principleSymbol { font: 24px var(--font-mono); color: var(--color-accent); height: 56px; }
+.principles h3 { font-size: 20px; letter-spacing: -.03em; }
+.principles p { font-size: 13px; line-height: 1.9; color: var(--color-fade); margin: 13px 0 22px; max-width: 300px; }
+.principles .textLink { margin-top: auto; font-size: 10px; }
+.comparison { border: 1px solid var(--color-edge); border-radius: 4px; margin-top: 40px; padding: 19px 22px; display: flex; justify-content: space-between; gap: 20px; font: 11px/1.6 var(--font-mono); background: var(--color-card); transition: border-color .2s; }
+.comparison:hover { border-color: var(--color-accent); }
+.comparison > span:last-child { color: var(--color-fade); font-size: 10px; }
+.comparison > span:last-child > span { margin-left: 15px; color: var(--color-accent); }
+.closing { display: flex; justify-content: space-between; gap: 30px; align-items: center; border-top: 1px solid var(--color-edge); padding: 55px 0 65px; }
+.closing h2 { font-size: clamp(25px, 3vw, 35px); font-weight: 400; letter-spacing: -.045em; margin: 12px 0; }
+.closing h2 code { color: var(--color-accent); font-size: .9em; }
+.closing p:not(.kicker) { font-size: 13px; color: var(--color-fade); }
+.closing .primaryButton { flex-shrink: 0; }
+.footer { padding: 25px 0 30px; border-top: 1px solid var(--color-edge); display: flex; align-items: center; gap: 25px; font: 9px/1.8 var(--font-mono); color: var(--color-fade); }
+.footerLogo { display: inline-flex; align-items: center; min-height: 44px; flex-shrink: 0; }
+.footer nav { display: flex; gap: 22px; margin-left: auto; }
+.footer a:hover { color: var(--color-accent); }
+.footerEnd { font-size: 8px; margin-left: 12px; }
+.footerEnd span { color: var(--color-sage); margin-left: 5px; }
+@media (min-width: 1400px) { .hero { padding-top: 90px; padding-bottom: 80px; } }
+@media (max-width: 1050px) { .hero { gap: 30px; } .hero h1 { font-size: 64px; } .home { padding: 0 28px; } .workbench { gap: 30px; } .primitives { font-size: 9px; gap: 12px; } .principles { gap: 28px; } .install code { font-size: 9px; } }
+@media (max-width: 800px) { .hero { grid-template-columns: 1fr; gap: 45px; padding: 50px 0; } .heroCopy { max-width: 580px; } .hero h1 { font-size: clamp(58px, 10vw, 80px); } .heroDescription { max-width: 480px; } .hero > :last-child { width: 100%; max-width: 560px; justify-self: center; } .install { max-width: 470px; } .install code { font-size: 11px; } .primitives { flex-wrap: wrap; justify-content: flex-start; gap: 22px 30px; } .primitivesLabel { width: 100%; } .primitivesLabel br { display: none; } .primitivesLabel strong { margin-left: 5px; } .sectionHeading > p br { display: none; } .sectionHeading > p { max-width: 270px; } .workbench { grid-template-columns: 1fr; gap: 35px; } .steps { gap: 22px; } .steps li:not(:last-child)::after { bottom: -10px; } .workflow { padding: 60px 0; } .workflowFoot { flex-direction: column; gap: 12px; } .philosophy { padding: 55px 0; } .principles { gap: 24px; } .principles h3 { font-size: 17px; } .closing { align-items: flex-start; flex-direction: column; } .footer { flex-wrap: wrap; gap: 16px; } .footer nav { margin-left: auto; } .footerEnd { display: none; } }
+@media (max-width: 540px) { .home { padding: 0 20px; } .hero h1 { font-size: 58px; } .heroLead { font-size: 21px; } .heroDescription { font-size: 14px; } .heroActions { gap: 22px; } .heroActions .textLink { font-size: 10px; } .install code { font-size: 9px; } .compatibility { font-size: 8px; gap: 9px; } .primitives { gap: 18px 12px; } .primitives > span:not(:first-child) { width: calc(50% - 6px); } .sectionHeading { flex-direction: column; align-items: flex-start; gap: 20px; } .sectionHeading > p { max-width: none; font-size: 13px; } .principles { grid-template-columns: 1fr; gap: 30px; } .principles article + article { border-top: 1px solid var(--color-edge); padding-top: 25px; } .principleSymbol { height: 43px; font-size: 22px; } .principles h3 { font-size: 21px; } .principles p { max-width: none; margin-bottom: 14px; } .comparison { flex-direction: column; gap: 10px; } .manifest pre { font-size: 10px; padding: 18px; } .fileFoot { flex-wrap: wrap; } .steps li { gap: 14px; } .steps code { font-size: 10px; } .footer p { font-size: 8px; } .footer nav { margin: 0; width: 100%; padding-top: 5px; } }
+@media (prefers-reduced-motion: reduce) { .primaryButton, .textLink, .comparison { transition: none; } .primaryButton:hover { transform: none; } }

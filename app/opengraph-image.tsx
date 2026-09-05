@@ -1,89 +1,47 @@
 import { ImageResponse } from "next/og";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 
-export const alt = "ply — npm for containers";
+export const alt = "ply — Containers. The Unix way. Compose packages. Ship files. Run processes.";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
+
+const wordmark = await readFile(join(process.cwd(), "public/brand/wordmark-dark.png"), "base64");
 
 export default function OpenGraphImage() {
   return new ImageResponse(
     (
       <div
         style={{
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "space-between",
-          background: "#08100c",
-          color: "#e5ece7",
-          padding: "68px 76px",
-          fontFamily: "sans-serif",
+          width: "100%", height: "100%", display: "flex",
+          flexDirection: "column", justifyContent: "space-between",
+          background: "#151515", color: "#eeece5",
+          padding: "60px 72px", fontFamily: "sans-serif",
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            fontFamily: "monospace",
-            fontSize: 24,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center" }}>
-            <span
-              style={{
-                display: "flex",
-                border: "1px solid #34483d",
-                borderRadius: 8,
-                padding: "7px 11px",
-              }}
-            >
-              ply
-            </span>
-            <span style={{ marginLeft: 8, color: "#829087" }}>box</span>
-          </div>
-          <span style={{ color: "#43d991", fontSize: 18 }}>Linux · x64 + arm64</span>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          {/* next/og renders a data image directly; next/image is for browser pages. */}
+          <img src={`data:image/png;base64,${wordmark}`} width={200} height={72} alt="ply" />
+          <span style={{ color: "#a5a5a0", fontSize: 19, fontFamily: "monospace" }}>Linux · x86_64 / arm64</span>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column" }}>
-          <span
-            style={{
-              color: "#43d991",
-              fontFamily: "monospace",
-              fontSize: 20,
-              letterSpacing: 3,
-              textTransform: "uppercase",
-            }}
-          >
-            npm for containers
-          </span>
-          <span
-            style={{
-              marginTop: 24,
-              maxWidth: 980,
-              fontSize: 76,
-              fontWeight: 500,
-              lineHeight: 1.04,
-              letterSpacing: -4,
-            }}
-          >
-            Ship one file. Run like a process.
+          <span style={{ fontSize: 86, lineHeight: 1.04, letterSpacing: -4 }}>Containers.</span>
+          <span style={{ color: "#73d69b", fontSize: 86, lineHeight: 1.04, letterSpacing: -4 }}>The Unix way.</span>
+          <span style={{ color: "#a5a5a0", fontSize: 24, marginTop: 24 }}>
+            Compose packages. Ship files. Run processes.
           </span>
         </div>
 
         <div
           style={{
-            display: "flex",
-            alignItems: "center",
-            borderTop: "1px solid #26382f",
-            paddingTop: 26,
-            color: "#829087",
-            fontFamily: "monospace",
-            fontSize: 20,
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            borderTop: "1px solid #363636", paddingTop: 22,
+            fontSize: 18, fontFamily: "monospace",
           }}
         >
-          <span style={{ color: "#43d991", marginRight: 14 }}>$</span>
-          curl -fsSL https://plybox.sh/install.sh | sh
+          <span style={{ color: "#a5a5a0" }}>A daemonless Linux container runtime.</span>
+          <span style={{ color: "#73d69b" }}>plybox.sh</span>
         </div>
       </div>
     ),

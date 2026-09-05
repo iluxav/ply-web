@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { pkgHref } from "@/lib/registry";
+import { PackageBadge, PackageMark } from "./RegistryUI";
+import styles from "./Registry.module.css";
 
 export type RegistryRow = {
   name: string;
   namespace: string;
-  type: string; // "app" | "layer" | "stack"
+  type: string;
   community: boolean;
   description: string;
   license: string;
@@ -13,117 +15,62 @@ export type RegistryRow = {
   size: string;
 };
 
-function TypeBadge({ row }: { row: RegistryRow }) {
-  return (
-    <span className="ml-2 inline-flex gap-1 align-[2px]">
-      <span className="border border-edge px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-fade">
-        {row.type}
-      </span>
-      {row.community && (
-        <span className="border border-deep px-1.5 py-px font-mono text-[9px] uppercase tracking-wider text-accent/80">
-          community
-        </span>
-      )}
-    </span>
-  );
-}
-
 function PackageIdentity({ row }: { row: RegistryRow }) {
   return (
-    <div className="min-w-0">
-      <Link
-        href={pkgHref(row.namespace, row.name)}
-        className="font-mono text-sm text-ink transition-colors hover:text-accent"
-      >
-        {row.namespace !== "ply" && (
-          <span className="text-fade">{row.namespace}/</span>
-        )}
-        {row.name}
-      </Link>
-      <TypeBadge row={row} />
-      <p className="mt-1 line-clamp-2 max-w-2xl text-sm leading-5 text-fade">
-        {row.description || "No package description."}
-      </p>
+    <div className={styles.identity}>
+      <PackageMark type={row.type} />
+      <div>
+        <div className={styles.identityLine}>
+          <Link href={pkgHref(row.namespace, row.name)} className={styles.packageName}>
+            {row.community && <span className={styles.namespace}>{row.namespace}/</span>}
+            {row.name}
+          </Link>
+          {row.community && <span className={styles.community}>community</span>}
+        </div>
+        <p className={styles.packageDescription}>
+          {row.description || (row.type === "stack" ? "App composition · inspect the published manifest" : `Published by ${row.namespace} · inspect package details`)}
+        </p>
+      </div>
     </div>
   );
 }
 
-function Architectures({ values }: { values: string[] }) {
-  return (
-    <span className="font-mono text-xs text-fade">
-      {values.length > 0 ? values.join(" · ") : "—"}
-    </span>
-  );
-}
-
-function MobileRow({ row }: { row: RegistryRow }) {
-  return (
-    <article className="py-5 first:pt-0 last:pb-0">
-      <PackageIdentity row={row} />
-      <dl className="mt-4 grid grid-cols-2 gap-x-5 gap-y-3 font-mono text-[11px] sm:grid-cols-4">
-        <div>
-          <dt className="text-fade">latest</dt>
-          <dd className="mt-1 text-ink">{row.version}</dd>
-        </div>
-        <div>
-          <dt className="text-fade">architectures</dt>
-          <dd className="mt-1"><Architectures values={row.architectures} /></dd>
-        </div>
-        <div>
-          <dt className="text-fade">size</dt>
-          <dd className="mt-1 text-ink">{row.size}</dd>
-        </div>
-        <div className="min-w-0">
-          <dt className="text-fade">license</dt>
-          <dd className="mt-1 truncate text-ink">{row.license || "—"}</dd>
-        </div>
-      </dl>
-    </article>
-  );
+function architectureLabel(row: RegistryRow) {
+  return row.type === "stack" ? "manifest" : row.architectures.join(" / ") || "—";
 }
 
 export function RegistryTable({ rows }: { rows: RegistryRow[] }) {
   if (rows.length === 0) return null;
-
   return (
     <>
-      <div className="ply-panel mt-6 divide-y divide-edge border border-edge px-4 lg:hidden">
+      <div className={styles.mobilePackages}>
         {rows.map((row) => (
-          <MobileRow key={`${row.namespace}/${row.name}`} row={row} />
+          <article key={`${row.namespace}/${row.name}`} className={styles.mobileRow}>
+            <PackageIdentity row={row} />
+            <dl className={styles.mobileMeta}>
+              <div><dt>type</dt><dd><PackageBadge type={row.type} /></dd></div>
+              <div><dt>latest</dt><dd>{row.version}</dd></div>
+              <div><dt>build</dt><dd>{architectureLabel(row)}</dd></div>
+              <div><dt>size</dt><dd>{row.size}</dd></div>
+              {row.license && <div><dt>license</dt><dd>{row.license}</dd></div>}
+            </dl>
+          </article>
         ))}
       </div>
-
-      <div className="registry-table-frame mt-6 hidden border border-edge lg:block">
-        <table className="w-full table-fixed text-left">
-          <colgroup>
-            <col className="w-[48%]" />
-            <col className="w-[12%]" />
-            <col className="w-[14%]" />
-            <col className="w-[10%]" />
-            <col className="w-[16%]" />
-          </colgroup>
-          <thead className="registry-table-head sticky top-[61px] z-10">
-            <tr className="border-b border-edge font-mono text-[10px] uppercase tracking-wider text-fade">
-              <th className="px-5 py-3 font-normal">package</th>
-              <th className="px-5 py-3 font-normal">latest</th>
-              <th className="px-5 py-3 font-normal">architectures</th>
-              <th className="px-5 py-3 text-right font-normal">size</th>
-              <th className="px-5 py-3 font-normal">license</th>
-            </tr>
-          </thead>
+      <div className={styles.tableFrame}>
+        <table className={styles.packageTable}>
+          <caption className="sr-only">Packages matching the selected search and filters</caption>
+          <colgroup><col style={{ width: "43%" }} /><col style={{ width: "9%" }} /><col style={{ width: "12%" }} /><col style={{ width: "14%" }} /><col style={{ width: "10%" }} /><col style={{ width: "12%" }} /></colgroup>
+          <thead><tr><th scope="col">package / description</th><th scope="col">type</th><th scope="col">latest</th><th scope="col">build</th><th scope="col">size</th><th scope="col">license</th></tr></thead>
           <tbody>
             {rows.map((row) => (
-              <tr
-                key={`${row.namespace}/${row.name}`}
-                className="border-b border-edge align-top transition-colors last:border-b-0 hover:bg-card"
-              >
-                <td className="px-5 py-4"><PackageIdentity row={row} /></td>
-                <td className="px-5 py-4 font-mono text-xs text-ink">{row.version}</td>
-                <td className="px-5 py-4"><Architectures values={row.architectures} /></td>
-                <td className="whitespace-nowrap px-5 py-4 text-right font-mono text-xs text-fade">{row.size}</td>
-                <td className="truncate px-5 py-4 font-mono text-xs text-fade" title={row.license || undefined}>
-                  {row.license || "—"}
-                </td>
+              <tr key={`${row.namespace}/${row.name}`}>
+                <td><PackageIdentity row={row} /></td>
+                <td><PackageBadge type={row.type} /></td>
+                <td>{row.version}</td>
+                <td>{architectureLabel(row)}</td>
+                <td>{row.size}</td>
+                <td>{row.license || "—"}</td>
               </tr>
             ))}
           </tbody>

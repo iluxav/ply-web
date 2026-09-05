@@ -1,0 +1,21 @@
+.composition { font-family: var(--font-mono); }
+.annotation { fill: var(--color-fade); font-size: 9px; letter-spacing: 1px; }
+.connections { fill: none; stroke: var(--color-fade); stroke-width: 1; opacity: .65; }
+.package { color: var(--color-sage); }
+.package[data-kind="0"] { color: var(--color-accent); }
+.package[data-kind="2"] { color: var(--color-fade); }
+.package rect { fill: var(--color-card); stroke: currentColor; stroke-opacity: .6; }
+.package path { fill: none; stroke: currentColor; stroke-width: 1.2; }
+.packageRole { fill: currentColor; font-size: 9px; letter-spacing: .6px; }
+.packageName { fill: var(--color-ink); font-size: 13px; }
+.lockfile rect { fill: var(--color-ground); stroke: var(--color-accent); }
+.fileName { fill: var(--color-accent); font-size: 13px; }
+.fileDescription { fill: var(--color-fade); font-size: 8px; letter-spacing: .7px; }
+.environment rect { fill: var(--color-ground); stroke: var(--color-edge); stroke-dasharray: 4 4; transition: stroke .3s, fill .3s; }
+.environment circle { fill: var(--color-fade); }
+.processName { fill: var(--color-ink); font-size: 13px; }
+.processDetail { fill: var(--color-fade); font-size: 9px; }
+.composition[data-stage="2"] .environment rect { fill: var(--color-card); stroke: var(--color-sage); stroke-dasharray: none; }
+.composition[data-stage="2"] .environment circle { fill: var(--color-sage); }
+.composition[data-stage="2"] .connections { stroke: var(--color-sage); opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .environment rect { transition: none; } }

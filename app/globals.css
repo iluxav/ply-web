@@ -1,18 +1,20 @@
-/* Design tokens: warm terminal black, apricot action, cool-blue secondary text. */
+/* Neutral charcoal surfaces, terminal green, and sage runtime indicators. */
 @import "tailwindcss";
 
 @theme {
-  --color-ground: #0e0a07;
-  --color-card: #171310;
-  --color-edge: #3a2a20;
-  --color-ink: #e7e9e5;
-  --color-fade: #9fb9ce;
-  --color-accent: #ffbd81;
-  --color-deep: #5a3828;
-  --color-steel: #1c1918;
-  --color-steel-edge: #4a3d31;
-  --color-steel-ink: #e7eaed;
-  --color-steel-fade: #aaa99f;
+  --color-ground: #151515;
+  --color-card: #1e1e1e;
+  --color-edge: #363636;
+  --color-ink: #eeece5;
+  --color-fade: #a5a5a0;
+  --color-accent: #73d69b;
+  --color-accent-hover: #96e2b4;
+  --color-sage: #a9c495;
+  --color-deep: #254331;
+  --color-steel: #222222;
+  --color-steel-edge: #414141;
+  --color-steel-ink: #eeece5;
+  --color-steel-fade: #a5a5a0;
 
   --font-sans: var(--font-plex-sans), "IBM Plex Sans", system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas,
@@ -20,9 +22,9 @@
 }
 
 :root {
-  --hl-comment: #738596;
-  --hl-string: #ffbd81;
-  --hl-title: #e7e9e5;
+  --hl-comment: var(--color-fade);
+  --hl-string: var(--color-ink);
+  --hl-title: var(--color-ink);
 }
 
 @layer base {
@@ -67,11 +69,25 @@
 }
 
 .logo {
-  background-color: var(--color-card);
-  border: 1px solid var(--color-edge);
-  border-radius: 6px 0 6px 6px;
-  padding: 0.1rem 0.45rem;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  flex-shrink: 0;
 }
+.logo img { display: block; width: 100px; height: 36px; }
+.site-header { border-bottom: 1px solid var(--color-edge); background: var(--color-ground); }
+.site-nav { max-width: 1240px; min-height: 77px; padding: 0 40px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 24px; }
+.site-brand { display: flex; align-items: center; gap: 24px; }
+.site-tagline { font: 9px var(--font-mono); color: var(--color-fade); padding-left: 24px; border-left: 1px solid var(--color-edge); }
+.site-links { display: flex; align-items: center; gap: 28px; font: 11px var(--font-mono); color: var(--color-fade); }
+.site-links a { display: inline-flex; align-items: center; min-height: 44px; gap: 8px; transition: color .2s; }
+.site-links a:hover { color: var(--color-accent); }
+.site-links .source-link { color: var(--color-ink); border: 1px solid var(--color-edge); border-radius: 4px; padding: 0 14px; min-height: 35px; }
+.skip-link { position: fixed; z-index: 50; top: 8px; left: 8px; padding: 10px 16px; color: var(--color-ground); background: var(--color-accent); transform: translateY(-160%); }
+.skip-link:focus { transform: translateY(0); }
+@media (max-width: 1050px) { .site-nav { padding: 0 28px; } }
+@media (max-width: 800px) { .site-tagline { display: none; } .site-links { gap: 22px; } }
+@media (max-width: 540px) { .site-nav { min-height: 68px; padding: 0 20px; gap: 18px; } .site-links { gap: 15px; font-size: 10px; } .site-links .source-link { display: none; } }
 
 .eyebrow {
   color: var(--color-accent);
