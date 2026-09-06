@@ -111,6 +111,6 @@ export async function userForToken(token: string) {
     WHERE token_hash = ${hashToken(token)}
     RETURNING user_id`;
   if (rows.length === 0) return null;
-  const [u] = await sql`SELECT id, login, username FROM users WHERE id = ${rows[0].user_id}`;
-  return (u as { id: number; login: string; username: string | null }) ?? null;
+  const [u] = await sql`SELECT id, login, username, created_at FROM users WHERE id = ${rows[0].user_id}`;
+  return (u as { id: number; login: string; username: string | null; created_at: Date }) ?? null;
 }

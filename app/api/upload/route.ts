@@ -7,13 +7,19 @@ import { canPublish, isOwnerSegment } from "@/lib/namespaces";
 import { ready } from "@/lib/db";
 import { putObject } from "@/lib/r2";
 import { REGISTRY } from "@/lib/catalog-files";
+import { acquireUploadSlot, checkPush, clientIp, failures, recordPush, refusalHeaders } from "@/lib/limits";
 
 const MAX_BYTES = 512 * 1024 * 1024;
 const NAME_RE = /^([a-z0-9][a-z0-9-]*)-(\d+\.\d+\.\d+)-linux-(x64|arm64)\.img$/;
 
 export async function POST(req: Request) {
+  const ip = clientIp(req);
+  if (!failures.allow(ip)) return NextResponse.json({ error: "too many requests with an invalid key — wait a minute" }, { status: 429, headers: { "Retry-After": "60" } });
   const user = await userForToken((req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, ""));
-  if (!user) return NextResponse.json({ error: "publish with a key: Authorization: Bearer ply_…" }, { status: 401 });
+  if (!user) {
+    failures.noteFailure(ip);
+    return NextResponse.json({ error: "publish with a key: Authorization: Bearer ply_…" }, { status: 401 });
+  }
   const filename = req.headers.get("x-ply-filename") ?? "";
   const m = NAME_RE.exec(filename);
   if (!m) return NextResponse.json({ error: "X-Ply-Filename must be <name>-<x.y.z>-linux-<x64|arm64>.img" }, { status: 400 });
@@ -26,13 +32,36 @@ export async function POST(req: Request) {
   if (!sql) return NextResponse.json({ error: "registry accounts are not enabled here" }, { status: 503 });
   if (!req.body) return NextResponse.json({ error: "empty body" }, { status: 400 });
 
+  // Budget first, then a seat: every upload is buffered whole.
+  const [known] = await sql`SELECT 1 FROM packages WHERE owner = ${owner} AND name = ${m[1]}`;
+  const gate = await checkPush(sql, user, owner, "upload", { incoming_bytes: Number(req.headers.get("content-length") ?? 0) || 0, new_package: !known });
+  if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status, headers: refusalHeaders(gate) });
+  const release = acquireUploadSlot(user.id, gate.limits);
+  if (!release) return NextResponse.json({ error: "an upload from this account is already in flight, or the registry is busy — try again in a moment" }, { status: 429, headers: { "Retry-After": "10" } });
+  try {
+    return await store(req, sql, user, owner, m, filename, gate.remaining_bytes);
+  } finally {
+    release();
+  }
+}
+
+async function store(
+  req: Request,
+  sql: NonNullable<Awaited<ReturnType<typeof ready>>>,
+  user: NonNullable<Awaited<ReturnType<typeof userForToken>>>,
+  owner: string,
+  m: RegExpExecArray,
+  filename: string,
+  budget: number,
+) {
   const chunks: Buffer[] = []; const hash = createHash("sha256"); let total = 0;
-  const reader = req.body.getReader();
+  const reader = req.body!.getReader();
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
     total += value.byteLength;
     if (total > MAX_BYTES) return NextResponse.json({ error: "image exceeds 512MB" }, { status: 413 });
+    if (total > budget) return NextResponse.json({ error: "this upload would exceed the account's bytes for today, or its storage — try again tomorrow, or ask for more" }, { status: 429, headers: { "Retry-After": "3600" } });
     hash.update(value); chunks.push(Buffer.from(value));
   }
   if (total === 0) return NextResponse.json({ error: "empty body" }, { status: 400 });
@@ -55,6 +84,7 @@ export async function POST(req: Request) {
       await sql`DELETE FROM uploads WHERE key = ${key}`;
       throw e;
     }
+    await recordPush(sql, user.id, "upload", total);
   } else {
     const [existing] = await sql`SELECT sha256 FROM uploads WHERE key = ${key}`;
     if (!existing || existing.sha256 !== sha256) {

@@ -172,6 +172,17 @@ async function migrate(s: Queryable) {
         UNIQUE (package_id, version)
       )`;
     await s`CREATE INDEX IF NOT EXISTS records_manifest_gin ON records USING gin (manifest)`;
+    // The rate-limit ledger (lib/limits.ts): one row per accepted push,
+    // summed over rolling windows. Never read for anything else.
+    await s`
+      CREATE TABLE IF NOT EXISTS quota_events (
+        id      bigserial PRIMARY KEY,
+        user_id int NOT NULL REFERENCES users(id),
+        kind    text NOT NULL,
+        bytes   bigint NOT NULL DEFAULT 0,
+        at      timestamptz NOT NULL DEFAULT now()
+      )`;
+    await s`CREATE INDEX IF NOT EXISTS quota_events_user_at ON quota_events (user_id, at)`;
     // Bytes the registry stored itself: the only srcs a publish may mark verified.
     await s`
       CREATE TABLE IF NOT EXISTS uploads (

@@ -30,6 +30,7 @@ import { putObject } from "@/lib/r2";
 import { loadRecord, saveRecord } from "@/lib/records";
 import { writeCatalogFiles, REGISTRY } from "@/lib/catalog-files";
 import { manifestJson } from "@/lib/manifest";
+import { acquireUploadSlot, checkPush, clientIp, failures, recordPush, refusalHeaders, refusesOrigin } from "@/lib/limits";
 
 
 const MAX_BYTES = 512 * 1024 * 1024;
@@ -59,10 +60,35 @@ export function parseOriginUrl(raw: string):
   return { url: u.toString(), filename, name: m[1], version: m[2], arch: m[3] };
 }
 
+type StackApp = {
+  run: string;
+  name?: string;
+  e?: string[];
+  after?: string[];
+  publish?: string[];
+  volume?: string[];
+  domain?: string[];
+  scale?: number;
+};
+type Meta = {
+  type: string;
+  volumes: string[];
+  links: string[];
+  dependencies: { name: string; version: string }[];
+  apps: StackApp[];
+};
+
 export async function POST(req: Request, ctx: { params: Promise<{ target?: string[] }> }) {
   const auth = req.headers.get("authorization") ?? "";
+  // A bad token costs a lookup; an address that keeps sending them is told
+  // to wait before the lookup, not after.
+  const ip = clientIp(req);
+  if (!failures.allow(ip)) {
+    return NextResponse.json({ error: "too many requests with an invalid key — wait a minute" }, { status: 429, headers: { "Retry-After": "60" } });
+  }
   const user = await userForToken(auth.replace(/^Bearer\s+/i, ""));
   if (!user) {
+    failures.noteFailure(ip);
     return NextResponse.json(
       { error: "publish with a key: Authorization: Bearer ply_… (ply login, or plybox.sh/account)" },
       { status: 401 },
@@ -140,23 +166,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ target?: strin
   // Client-derived catalog metadata (X-Ply-Meta) — the client reads the
   // image's own manifest + lockfile and sends the result; the server stores
   // it verbatim. The bytes' sha256 is what's proven; this is descriptive.
-  type StackApp = {
-    run: string;
-    name?: string;
-    e?: string[];
-    after?: string[];
-    publish?: string[];
-    volume?: string[];
-    domain?: string[];
-    scale?: number;
-  };
-  type Meta = {
-    type: string;
-    volumes: string[];
-    links: string[];
-    dependencies: { name: string; version: string }[];
-    apps: StackApp[];
-  };
   let meta: Meta = { type: "app", volumes: [], links: [], dependencies: [], apps: [] };
   try {
     const raw = req.headers.get("x-ply-meta");
@@ -180,6 +189,47 @@ export async function POST(req: Request, ctx: { params: Promise<{ target?: strin
   const sql = await ready();
   if (!sql) return NextResponse.json({ error: "registry accounts are not enabled here" }, { status: 503 });
 
+  // The account's budget, before a byte is read or a row written: rates,
+  // the day's bytes, stored bytes, the namespace's size. A URL push also
+  // has to point somewhere the registry is willing to fetch from.
+  const kind = origin ? "url" : "upload";
+  const [known] = await sql`SELECT 1 FROM packages WHERE owner = ${owner} AND name = ${name}`;
+  const gate = await checkPush(sql, user, owner, kind, {
+    incoming_bytes: Number(req.headers.get("content-length") ?? 0) || 0,
+    new_package: !known,
+  });
+  if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status, headers: refusalHeaders(gate) });
+  if (origin) {
+    const refused = await refusesOrigin(origin.url);
+    if (refused) return NextResponse.json({ error: refused }, { status: 400 });
+  }
+  const release = origin ? null : acquireUploadSlot(user.id, gate.limits);
+  if (!origin && !release) {
+    return NextResponse.json(
+      { error: `${gate.limits.concurrent_uploads === 1 ? "an upload" : `${gate.limits.concurrent_uploads} uploads`} from this account ${gate.limits.concurrent_uploads === 1 ? "is" : "are"} already in flight, or the registry is busy — try again in a moment` },
+      { status: 429, headers: { "Retry-After": "10" } },
+    );
+  }
+  try {
+    return await publish(req, sql, { user, owner, name, version, arch, filename, isStack, origin, meta, kind, budget: gate.remaining_bytes });
+  } finally {
+    release?.();
+  }
+}
+
+type PushInput = {
+  user: NonNullable<Awaited<ReturnType<typeof userForToken>>>;
+  owner: string; name: string; version: string; arch: string; filename: string; isStack: boolean;
+  origin: { url: string; filename: string; name: string; version: string; arch: string } | null;
+  meta: Meta;
+  kind: "upload" | "url";
+  /// Bytes the account may still add today (and store, for an upload).
+  budget: number;
+};
+
+/// The push proper, once the account has been allowed to make it.
+async function publish(req: Request, sql: NonNullable<Awaited<ReturnType<typeof ready>>>, input: PushInput) {
+  const { user, owner, name, version, arch, filename, isStack, origin, meta, kind, budget } = input;
   const [pkg] = await sql`
     INSERT INTO packages (owner, name, type) VALUES (${owner}, ${name}, ${meta.type})
     ON CONFLICT (owner, name) DO UPDATE SET type = ${meta.type}
@@ -226,6 +276,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ target?: strin
       if (total > MAX_ORIGIN_BYTES) {
         return NextResponse.json({ error: "origin exceeds 1GiB" }, { status: 413 });
       }
+      if (total > budget) {
+        return NextResponse.json({ error: "this fetch would exceed the account's bytes for today — try again tomorrow" }, { status: 429, headers: { "Retry-After": "3600" } });
+      }
       if (!first) {
         first = Buffer.from(value.slice(0, 4));
         if (first.length >= 4 && first.toString("latin1") !== "hsqs") {
@@ -247,6 +300,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ target?: strin
       total += value.byteLength;
       if (total > MAX_BYTES) {
         return NextResponse.json({ error: "image exceeds 512MB" }, { status: 413 });
+      }
+      if (total > budget) {
+        return NextResponse.json({ error: "this upload would exceed the account's bytes for today, or its storage — try again tomorrow, or ask for more" }, { status: 429, headers: { "Retry-After": "3600" } });
       }
       hash.update(value);
       chunks.push(Buffer.from(value));
@@ -286,6 +342,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ target?: strin
     published_by: user.id,
   }, merged);
   if (!origin && !isStack) await sql`INSERT INTO uploads (key, sha256, bytes, user_id) VALUES (${`${owner}/${name}/${filename}`}, ${sha256}, ${total}, ${user.id}) ON CONFLICT (key) DO NOTHING`;
+  await recordPush(sql, user.id, kind, total);
   await writeCatalogFiles(sql, owner, name);
 
   return NextResponse.json({

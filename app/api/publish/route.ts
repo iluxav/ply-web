@@ -5,6 +5,7 @@ import { canPublish, isOwnerSegment, isReserved } from "@/lib/namespaces";
 import { ready } from "@/lib/db";
 import { loadRecord, mergePublish, saveRecord, validatePublishBody } from "@/lib/records";
 import { writeCatalogFiles, REGISTRY } from "@/lib/catalog-files";
+import { checkPush, clientIp, failures, recordPush, refusalHeaders } from "@/lib/limits";
 
 // Duplicated one-liner from lib/catalog-files.ts's own `basename` — the
 // last path segment of a src URL, VERBATIM. Never decoded: an R2 key is
@@ -12,8 +13,13 @@ import { writeCatalogFiles, REGISTRY } from "@/lib/catalog-files";
 const basename = (u: string) => u.split("/").at(-1) ?? "";
 
 export async function POST(req: Request) {
+  const ip = clientIp(req);
+  if (!failures.allow(ip)) return NextResponse.json({ error: "too many requests with an invalid key — wait a minute" }, { status: 429, headers: { "Retry-After": "60" } });
   const user = await userForToken((req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, ""));
-  if (!user) return NextResponse.json({ error: "publish with a key: Authorization: Bearer ply_…" }, { status: 401 });
+  if (!user) {
+    failures.noteFailure(ip);
+    return NextResponse.json({ error: "publish with a key: Authorization: Bearer ply_…" }, { status: 401 });
+  }
   const body = await req.json().catch(() => null);
   const v = validatePublishBody(body);
   if (!v.ok) return NextResponse.json({ error: v.error }, { status: 400 });
@@ -27,6 +33,12 @@ export async function POST(req: Request) {
   }
   const sql = await ready();
   if (!sql) return NextResponse.json({ error: "registry accounts are not enabled here" }, { status: 503 });
+
+  // A publish carries no bytes, but it is a push: the hourly rate and the
+  // namespace's size apply.
+  const [known] = await sql`SELECT 1 FROM packages WHERE owner = ${owner} AND name = ${rec.name}`;
+  const gate = await checkPush(sql, user, owner, "publish", { new_package: !known });
+  if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status, headers: refusalHeaders(gate) });
 
   // `verified` is the server's word: only bytes it stored itself. And a src
   // that CLAIMS this registry has to be one this registry issued, under this
@@ -81,6 +93,7 @@ export async function POST(req: Request) {
   // a multi-literal `status`, which a literal-equality check alone won't
   // narrow away past the `if`.
   if ("error" in merge) return NextResponse.json({ error: merge.error, ...(merge.diff ? { diff: merge.diff } : {}) }, { status: merge.status });
+  if (merge.status === 201) await recordPush(sql, user.id, "publish", 0);
   await writeCatalogFiles(sql, owner, rec.name);
   const stored = await loadRecord(sql, owner, rec.name, rec.version);
   return NextResponse.json(stored, { status: merge.status });

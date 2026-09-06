@@ -9,6 +9,7 @@
 // the web) is the only way a pipeline gets to publish.
 import { NextResponse } from "next/server";
 import { mintToken, userForToken } from "@/lib/auth";
+import { mayMintKey, refusalHeaders } from "@/lib/limits";
 import { ready } from "@/lib/db";
 import { sessionUser } from "@/lib/session";
 
@@ -35,6 +36,12 @@ export async function POST(req: Request) {
     note = String(form?.get("note") ?? "");
   }
 
+  const sql = await ready();
+  if (sql) {
+    const [row] = await sql<{ created_at: Date }[]>`SELECT created_at FROM users WHERE id = ${user.id}`;
+    const full = await mayMintKey(sql, { id: user.id, login: user.login ?? "", username: user.username ?? null, created_at: row?.created_at ?? null });
+    if (full) return NextResponse.json({ error: full.error }, { status: full.status, headers: refusalHeaders(full) });
+  }
   const token = await mintToken(user.id, note);
   if (!token) {
     return NextResponse.json({ error: "registry accounts are not enabled here" }, { status: 503 });
