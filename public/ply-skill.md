@@ -248,6 +248,8 @@ load as connections turn over.
 
 ```sh
 ply ps                     # instances, IPs, ports, uptime, restarts
+ply why APP [--json]       # FIRST STOP when something is wrong: exits (code/signal/OOM/uptime),
+                           # blocked traffic with the fix, recent changes — evidence, not guesses
 ply stats [APP]            # live CPU/memory/pids from cgroups
 ply exec APP[.N] sh        # shell inside a running instance
 ply check IMAGE            # validate an image
@@ -309,6 +311,7 @@ ply ps [--json]
 ply stats [APP|APP.N] [--json]
 ply exec APP[.N] CMD...
 ply egress APP [--follow] [--blocked] [--json]          # the outbound audit log as a table
+ply why APP [--json]                                    # exits, blocked traffic, changes — with evidence
 ```
 
 `--publish` forms:
