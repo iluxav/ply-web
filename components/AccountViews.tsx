@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { NewKey } from "./NewKey";
+import { AccountTabs } from "./AccountTabs";
 import { RevokeKey } from "./RevokeKey";
 import { PackageBadge, PackageMark, RegistryCode } from "./RegistryUI";
 import { pkgHref } from "../lib/registry";
@@ -103,35 +104,43 @@ export function AccountDashboard({ username, namespaces, packages, keys }: { use
       </nav>
       <div className={styles.dashboard}>
         <div className={styles.content}>
-          <section id="packages" className={styles.section} aria-labelledby="packages-title">
-            <div className={styles.sectionHeader}><h2 id="packages-title">Published packages</h2><span>{packages.length} total</span></div>
-            {packages.length === 0 ? (
-              <div className={styles.empty}><h3>Your first package goes here.</h3><p>Build your app, connect with <code>ply login</code>, then push the package file to your namespace.</p><Link href="/docs/registries/" className={styles.textLink}>Learn how to publish →</Link></div>
-            ) : (
-              <div className={styles.packageList}>{packages.map((p) => (
-                <article key={p.owner + "/" + p.name} className={styles.package}>
-                  <div className={styles.packageIdentity}><PackageMark type={p.type} /><div><Link href={pkgHref(p.owner, p.name)}><span>{p.owner}/</span>{p.name}</Link><p><PackageBadge type={p.type} /><span>{p.versions} version{p.versions === 1 ? "" : "s"}</span></p></div></div>
-                  <div className={styles.packageMeta}><p>Last push {fmtDate(p.lastPush)}{p.lastPush ? " UTC" : ""}</p><a href={"https://registry.plybox.sh/" + encodeURIComponent(p.owner) + "/" + encodeURIComponent(p.name) + "/index.json"}>Raw index ↗</a></div>
-                </article>
-              ))}</div>
-            )}
-          </section>
-          <section id="keys" className={styles.section} aria-labelledby="keys-title">
-            <div className={styles.sectionHeader}><h2 id="keys-title">CLI keys</h2><span>{keys.length} total</span></div>
-            <p className={styles.help}>Connect a machine with <code>ply login</code>, use <code>ply key new</code>, or generate a key here for CI. Keys are shown once; only their hashes are stored.</p>
-            <NewKey />
-            {keys.length === 0 ? (
-              <div className={styles.empty}><h3>No CLI keys yet.</h3><p>Generate a key above or run <code>ply login</code> on your machine. Your keys will appear here.</p></div>
-            ) : (
-              <div className={styles.keyList}>{keys.map((key) => (
-                <article key={key.id} className={styles.key}>
-                  <div className={styles.keyIdentity}><h3>{key.note || "Unnamed key"}<span>key #{key.id}</span></h3><div className={styles.keyDates}><span>Created {fmtDate(key.createdAt)}{key.createdAt ? " UTC" : ""}</span><span>Last used {fmtDate(key.lastUsedAt)}{key.lastUsedAt ? " UTC" : ""}</span></div></div>
-                  <RevokeKey id={key.id} label={(key.note || "key") + " #" + key.id} />
-                </article>
-              ))}</div>
-            )}
-            <p className={styles.caption}>Revoking a key stops its access immediately. Keep keys out of source control.</p>
-          </section>
+          <AccountTabs
+            packageCount={packages.length}
+            keyCount={keys.length}
+            packages={
+              <section className={styles.section} aria-labelledby="packages-title">
+                <div className={styles.sectionHeader}><h2 id="packages-title">Published packages</h2><span>{packages.length} total</span></div>
+                {packages.length === 0 ? (
+                  <div className={styles.empty}><h3>Your first package goes here.</h3><p>Build your app, connect with <code>ply login</code>, then push the package file to your namespace.</p><Link href="/docs/registries/" className={styles.textLink}>Learn how to publish →</Link></div>
+                ) : (
+                  <div className={styles.packageList}>{packages.map((p) => (
+                    <article key={p.owner + "/" + p.name} className={styles.package}>
+                      <div className={styles.packageIdentity}><PackageMark type={p.type} /><div><Link href={pkgHref(p.owner, p.name)}><span>{p.owner}/</span>{p.name}</Link><p><PackageBadge type={p.type} /><span>{p.versions} version{p.versions === 1 ? "" : "s"}</span></p></div></div>
+                      <div className={styles.packageMeta}><p>Last push {fmtDate(p.lastPush)}{p.lastPush ? " UTC" : ""}</p><a href={"https://registry.plybox.sh/" + encodeURIComponent(p.owner) + "/" + encodeURIComponent(p.name) + "/index.json"}>Raw index ↗</a></div>
+                    </article>
+                  ))}</div>
+                )}
+              </section>
+            }
+            keys={
+              <section className={styles.section} aria-labelledby="keys-title">
+                <div className={styles.sectionHeader}><h2 id="keys-title">CLI keys</h2><span>{keys.length} total</span></div>
+                <p className={styles.help}>Connect a machine with <code>ply login</code>, use <code>ply key new</code>, or generate a key here for CI. Keys are shown once; only their hashes are stored.</p>
+                <NewKey />
+                {keys.length === 0 ? (
+                  <div className={styles.empty}><h3>No CLI keys yet.</h3><p>Generate a key above or run <code>ply login</code> on your machine. Your keys will appear here.</p></div>
+                ) : (
+                  <div className={styles.keyList}>{keys.map((key) => (
+                    <article key={key.id} className={styles.key}>
+                      <div className={styles.keyIdentity}><h3>{key.note || "Unnamed key"}<span>key #{key.id}</span></h3><div className={styles.keyDates}><span>Created {fmtDate(key.createdAt)}{key.createdAt ? " UTC" : ""}</span><span>Last used {fmtDate(key.lastUsedAt)}{key.lastUsedAt ? " UTC" : ""}</span></div></div>
+                      <RevokeKey id={key.id} label={(key.note || "key") + " #" + key.id} />
+                    </article>
+                  ))}</div>
+                )}
+                <p className={styles.caption}>Revoking a key stops its access immediately. Keep keys out of source control.</p>
+              </section>
+            }
+          />
         </div>
         <aside className={styles.sidebar} aria-label="Publishing information">
           <section id="namespaces"><h2>Your namespaces</h2>{namespaces.map((ns) => <code key={ns} className={styles.namespace}>{ns}/</code>)}<p className={styles.help}>You can publish packages to these namespaces.</p></section>
