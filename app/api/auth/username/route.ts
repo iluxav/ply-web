@@ -2,13 +2,14 @@
 // Session-gated: this is a decision a person makes in a browser, not
 // something a key does.
 import { NextResponse } from "next/server";
+import { siteOrigin } from "@/lib/site";
 import { claimUsername } from "@/lib/namespaces";
 import { sessionUser } from "@/lib/session";
 
 export async function POST(req: Request) {
   const user = await sessionUser();
   if (!user) return NextResponse.json({ error: "not signed in" }, { status: 401 });
-  const origin = new URL(req.url).origin;
+  const origin = siteOrigin();
   const form = await req.formData();
   const problem = await claimUsername(user.id, String(form.get("username") ?? ""));
   const url = new URL("/account/", origin);

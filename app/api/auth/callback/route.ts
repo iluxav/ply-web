@@ -5,9 +5,10 @@ import { NextResponse } from "next/server";
 import { githubUser, upsertGithubUser } from "@/lib/auth";
 import { ready } from "@/lib/db";
 import { createSession, cookieAttrs } from "@/lib/session";
+import { siteOrigin } from "@/lib/site";
 
 const CLIENT_ID = process.env.GITHUB_CLIENT_ID ?? "Ov23ctE7JOHi47WnLPVR";
-const ORIGIN = process.env.PLY_SITE_ORIGIN ?? "https://plybox.sh";
+const ORIGIN = siteOrigin();
 
 export async function GET(req: Request) {
   const u = new URL(req.url);

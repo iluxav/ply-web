@@ -10,6 +10,7 @@
 import { NextResponse } from "next/server";
 import { mintToken, userForToken } from "@/lib/auth";
 import { mayMintKey, refusalHeaders } from "@/lib/limits";
+import { siteOrigin } from "@/lib/site";
 import { ready } from "@/lib/db";
 import { sessionUser } from "@/lib/session";
 
@@ -51,8 +52,7 @@ export async function POST(req: Request) {
   }
   // The web lane shows the key once, in the URL fragment of the redirect —
   // a fragment never reaches the server or the access log.
-  const origin = new URL(req.url).origin;
-  return NextResponse.redirect(new URL(`/account/#key=${token}`, origin), 303);
+  return NextResponse.redirect(new URL(`/account/#key=${token}`, siteOrigin()), 303);
 }
 
 export async function GET(req: Request) {

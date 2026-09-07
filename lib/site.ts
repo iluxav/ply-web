@@ -2,6 +2,13 @@ import type { Metadata } from "next";
 
 export const SITE_NAME = "ply";
 export const SITE_URL = "https://plybox.sh";
+
+/// Where a browser is sent back to. Never derived from the request: behind
+/// the edge the request's own origin is the internal bind address
+/// (`0.0.0.0:3000`), and a redirect built from it lands the person there.
+export function siteOrigin(): string {
+  return process.env.PLY_SITE_ORIGIN ?? SITE_URL;
+}
 export const GITHUB_URL = "https://github.com/iluxav/ply";
 export const SITE_DESCRIPTION =
   "npm for containers: a daemonless Linux container runtime and package manager. Build a deterministic image, move one file, run it — no registry server.";

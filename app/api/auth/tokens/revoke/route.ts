@@ -2,6 +2,7 @@
 // Same two callers as minting: the account page's form (session, redirect)
 // and `ply key rm <id>` (bearer, JSON).
 import { NextResponse } from "next/server";
+import { siteOrigin } from "@/lib/site";
 import { userForToken } from "@/lib/auth";
 import { ready } from "@/lib/db";
 import { sessionUser } from "@/lib/session";
@@ -26,5 +27,5 @@ export async function POST(req: Request) {
     await sql`DELETE FROM tokens WHERE id = ${id} AND user_id = ${user.id}`;
   }
   if (type.includes("json")) return NextResponse.json({ ok: true });
-  return NextResponse.redirect(new URL("/account/", new URL(req.url).origin), 303);
+  return NextResponse.redirect(new URL("/account/", siteOrigin()), 303);
 }
