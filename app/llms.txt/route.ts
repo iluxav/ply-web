@@ -1,5 +1,7 @@
 import { llmsIndex } from "@/lib/ai-discovery";
 
+export const dynamic = "force-static";
+
 export function GET() {
   return new Response(llmsIndex(), {
     headers: {

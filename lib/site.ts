@@ -50,11 +50,18 @@ export function pageMetadata({
       title,
       description,
       url,
+      images: [{
+        url: absoluteUrl("/opengraph-image"),
+        width: 1200,
+        height: 630,
+        alt: "ply — npm for containers",
+      }],
     },
     twitter: {
       card: "summary_large_image",
       title,
       description,
+      images: [absoluteUrl("/twitter-image")],
     },
     robots: noIndex ? { index: false, follow: true } : undefined,
   };

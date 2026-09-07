@@ -19,7 +19,6 @@ export type DocPage = {
   section: string;
   order: number;
   markdown: string;
-  updatedAt: string;
   html: string;
 };
 
@@ -59,7 +58,6 @@ export function allDocs(): DocPage[] {
     );
     if (!data.title) continue; // design notes (e.g. ply-vm.md) aren't site pages
     const slug = path.basename(file, ".md");
-    const updatedAt = fs.statSync(path.join(DOCS_DIR, file)).mtime.toISOString();
     pages.push({
       slug,
       url: slug === "index" ? "/docs/" : `/docs/${slug}/`,
@@ -69,7 +67,6 @@ export function allDocs(): DocPage[] {
       section: data.section ?? "Guides",
       order: data.order ?? 99,
       markdown: content.trim(),
-      updatedAt,
       html: marked.parse(content) as string,
     });
   }

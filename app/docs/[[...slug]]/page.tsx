@@ -57,7 +57,6 @@ export default async function DocPage({
               headline: doc.title,
               description: doc.description,
               url: absoluteUrl(doc.url),
-              dateModified: doc.updatedAt,
               inLanguage: "en",
               isPartOf: { "@id": `${SITE_URL}/#website` },
               mainEntityOfPage: absoluteUrl(doc.url),

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Suspense } from "react";
 import {
   registryState,
   archOf,
@@ -139,14 +138,14 @@ export async function generateMetadata({
   });
 }
 
-async function RegistryCatalog({
+function RegistryCatalog({
   state,
   searchParams,
 }: {
   state: RegistryState;
-  searchParams: Promise<RegistrySearchParams>;
+  searchParams: RegistrySearchParams;
 }) {
-  const params = await searchParams;
+  const params = searchParams;
   const page = requestedPage(params);
   const query = searchQuery(params);
   const filter = filterOf(params);
@@ -238,16 +237,8 @@ async function RegistryCatalog({
   );
 }
 
-function CatalogFallback() {
-  return (
-    <div className="mt-12 border-y border-edge py-12 font-mono text-xs text-fade">
-      loading package index…
-    </div>
-  );
-}
-
 export default async function RegistryPage({ searchParams }: RegistryPageProps) {
-  const state = await registryState();
+  const [state, params] = await Promise.all([registryState(), searchParams]);
 
   return (
     <main className={styles.page}>
@@ -294,9 +285,7 @@ export default async function RegistryPage({ searchParams }: RegistryPageProps) 
         <span className={styles.updated}>Index updated {state.updated.slice(0, 16).replace("T", " ")} UTC</span>
       </div>
 
-      <Suspense fallback={<CatalogFallback />}>
-        <RegistryCatalog state={state} searchParams={searchParams} />
-      </Suspense>
+      <RegistryCatalog state={state} searchParams={params} />
     </main>
   );
 }

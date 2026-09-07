@@ -11,6 +11,7 @@ export const metadata: Metadata = pageMetadata({
   title: "Account",
   description: "Your ply registry account: packages, CLI tokens, publishing.",
   path: "/account/",
+  noIndex: true,
 });
 
 export default function AccountPage({

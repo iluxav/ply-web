@@ -1,6 +1,5 @@
 // The registry's machine-readable snapshot, cached server-side: visitors
 // never download the raw state; the droplet refetches on a short lifetime.
-import { cacheLife } from "next/cache";
 
 export type RegistryVersion = {
   version: string;
@@ -93,10 +92,9 @@ function dropFoldedAliases(packages: RegistryPackage[]): RegistryPackage[] {
 }
 
 export async function registryState(): Promise<RegistryState> {
-  "use cache";
-  cacheLife("minutes");
   const res = await fetch("https://registry.plybox.sh/state.json", {
     headers: { "User-Agent": "plybox-web" },
+    next: { revalidate: 60 },
   });
   if (!res.ok) throw new Error(`state.json: HTTP ${res.status}`);
   const state: RegistryState = await res.json();
