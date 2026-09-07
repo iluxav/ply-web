@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { NewKey } from "./NewKey";
+import { RevokeKey } from "./RevokeKey";
 import { PackageBadge, PackageMark, RegistryCode } from "./RegistryUI";
 import { pkgHref } from "../lib/registry";
 import styles from "./Account.module.css";
@@ -125,7 +126,7 @@ export function AccountDashboard({ username, namespaces, packages, keys }: { use
               <div className={styles.keyList}>{keys.map((key) => (
                 <article key={key.id} className={styles.key}>
                   <div className={styles.keyIdentity}><h3>{key.note || "Unnamed key"}<span>key #{key.id}</span></h3><div className={styles.keyDates}><span>Created {fmtDate(key.createdAt)}{key.createdAt ? " UTC" : ""}</span><span>Last used {fmtDate(key.lastUsedAt)}{key.lastUsedAt ? " UTC" : ""}</span></div></div>
-                  <form method="post" action="/api/auth/tokens/revoke/"><input type="hidden" name="id" value={key.id} /><button className={styles.revoke} aria-label={"Revoke " + (key.note || "key") + " #" + key.id}>Revoke</button></form>
+                  <RevokeKey id={key.id} label={(key.note || "key") + " #" + key.id} />
                 </article>
               ))}</div>
             )}
