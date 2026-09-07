@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import Script from "next/script";
 import { BrandLogo } from "@/components/BrandLogo";
 import { IBM_Plex_Sans } from "next/font/google";
 import { JsonLd } from "@/components/JsonLd";
@@ -83,6 +84,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
         </header>
         <div id="site-content" tabIndex={-1}>{children}</div>
+        {process.env.NODE_ENV === "production" && (
+          <Script
+            id="cloudflare-web-analytics"
+            type="module"
+            crossOrigin="anonymous"
+            src="https://static.cloudflareinsights.com/beacon.min.js"
+            data-cf-beacon='{"token":"0356c5d13b6f4c1782b324095bba9422"}'
+            strategy="afterInteractive"
+          />
+        )}
       </body>
     </html>
   );
