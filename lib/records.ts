@@ -17,6 +17,21 @@ export function firstDiff(a: string, b: string): string {
   return "";
 }
 
+// A keg converted from a distribution package carries its architecture in
+// the manifest: `provides_abi = "linux-arm64-gnu"`, and library paths under
+// `aarch64-linux-gnu` or `x86_64-linux-gnu`. Two such manifests for one
+// version are the same package for two machines, not two versions — so the
+// "one version, one manifest" rule compares them with those spellings
+// folded, and keeps the first manifest as the version's record. Anything
+// else that differs is still a different manifest.
+const ARCH_SPELLINGS: [RegExp, string][] = [
+  [/linux-(?:x64|arm64)-(gnu|musl)/g, "linux-{arch}-$1"],
+  [/(?:x86_64|aarch64)-linux-(gnu|musl)/g, "{triplet}-$1"],
+];
+export function foldArch(manifestToml: string): string {
+  return ARCH_SPELLINGS.reduce((t, [re, to]) => t.replace(re, to), manifestToml);
+}
+
 export function mergePublish(existing: Existing, incoming: { manifest_toml: string; artifacts: Artifact[] }): Merge {
   const seen = new Set<string>();
   for (const a of incoming.artifacts) {
@@ -27,7 +42,7 @@ export function mergePublish(existing: Existing, incoming: { manifest_toml: stri
   // A seeded/legacy record with manifest_toml === "" has no manifest to
   // compare against — "manifest unknown", not "manifest fixed". The first
   // real publish for that version supplies it without a 409.
-  if (existing.manifest_toml !== "" && existing.manifest_toml !== incoming.manifest_toml) {
+  if (existing.manifest_toml !== "" && foldArch(existing.manifest_toml) !== foldArch(incoming.manifest_toml)) {
     return {
       status: 409,
       error: "this version is already published with a different manifest — one version, one manifest; bump the version",

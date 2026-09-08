@@ -9,6 +9,16 @@ describe("mergePublish", () => {
   it("creates a version on first publish", () => {
     expect(mergePublish(null, { manifest_toml: "m", artifacts: [x64] })).toEqual({ status: 201, artifacts: [x64] });
   });
+  it("appends a new arch whose manifest differs only in architecture spellings", () => {
+    // deb2pkg kegs: the same package, one manifest per machine.
+    const armToml = "[package]\nname = \"python3\"\nprovides_abi = \"linux-arm64-gnu\"\n[layer]\nld_library_path = [\"/opt/python3-3.13.5/usr/lib/aarch64-linux-gnu\"]\n";
+    const x64Toml = "[package]\nname = \"python3\"\nprovides_abi = \"linux-x64-gnu\"\n[layer]\nld_library_path = [\"/opt/python3-3.13.5/usr/lib/x86_64-linux-gnu\"]\n";
+    const r = mergePublish({ manifest_toml: armToml, artifacts: [arm] }, { manifest_toml: x64Toml, artifacts: [x64] });
+    expect(r).toEqual({ status: 201, artifacts: [arm, x64] });
+    // …but a manifest that differs in anything else is still another version.
+    const other = x64Toml.replace("python3-3.13.5", "python3-3.13.6");
+    expect(mergePublish({ manifest_toml: armToml, artifacts: [arm] }, { manifest_toml: other, artifacts: [x64] }).status).toBe(409);
+  });
   it("appends a new arch to an existing version with the same manifest", () => {
     const r = mergePublish({ manifest_toml: "m", artifacts: [x64] }, { manifest_toml: "m", artifacts: [arm] });
     expect(r).toEqual({ status: 201, artifacts: [x64, arm] });
