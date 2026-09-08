@@ -28,8 +28,12 @@ const ARCH_SPELLINGS: [RegExp, string][] = [
   [/linux-(?:x64|arm64)-(gnu|musl)/g, "linux-{arch}-$1"],
   [/(?:x86_64|aarch64)-linux-(gnu|musl)/g, "{triplet}-$1"],
 ];
+// Lines are compared as a set: the converter sorts library paths, and the
+// architecture string decides where `aarch64-linux-gnu` and
+// `x86_64-linux-gnu` land in that order — same paths, different lines.
 export function foldArch(manifestToml: string): string {
-  return ARCH_SPELLINGS.reduce((t, [re, to]) => t.replace(re, to), manifestToml);
+  const folded = ARCH_SPELLINGS.reduce((t, [re, to]) => t.replace(re, to), manifestToml);
+  return folded.split("\n").map((l) => l.trim()).filter(Boolean).sort().join("\n");
 }
 
 export function mergePublish(existing: Existing, incoming: { manifest_toml: string; artifacts: Artifact[] }): Merge {

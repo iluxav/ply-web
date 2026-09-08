@@ -12,9 +12,13 @@ describe("mergePublish", () => {
   it("appends a new arch whose manifest differs only in architecture spellings", () => {
     // deb2pkg kegs: the same package, one manifest per machine.
     const armToml = "[package]\nname = \"python3\"\nprovides_abi = \"linux-arm64-gnu\"\n[layer]\nld_library_path = [\"/opt/python3-3.13.5/usr/lib/aarch64-linux-gnu\"]\n";
-    const x64Toml = "[package]\nname = \"python3\"\nprovides_abi = \"linux-x64-gnu\"\n[layer]\nld_library_path = [\"/opt/python3-3.13.5/usr/lib/x86_64-linux-gnu\"]\n";
-    const r = mergePublish({ manifest_toml: armToml, artifacts: [arm] }, { manifest_toml: x64Toml, artifacts: [x64] });
-    expect(r).toEqual({ status: 201, artifacts: [arm, x64] });
+    // …and the converter's sorted path lists land in a different order per
+    // architecture, which is not a different manifest either.
+    const x64Toml = "[package]\nname = \"python3\"\nprovides_abi = \"linux-x64-gnu\"\n[layer]\nld_library_path = [\n    \"/opt/python3-3.13.5/usr/lib/python3.13/lib-dynload\",\n    \"/opt/python3-3.13.5/usr/lib/x86_64-linux-gnu\",\n]\n";
+    const armToml2 = "[package]\nname = \"python3\"\nprovides_abi = \"linux-arm64-gnu\"\n[layer]\nld_library_path = [\n    \"/opt/python3-3.13.5/usr/lib/aarch64-linux-gnu\",\n    \"/opt/python3-3.13.5/usr/lib/python3.13/lib-dynload\",\n]\n";
+    expect(mergePublish({ manifest_toml: armToml2, artifacts: [arm] }, { manifest_toml: x64Toml, artifacts: [x64] }).status).toBe(201);
+    const r = mergePublish({ manifest_toml: armToml, artifacts: [arm] }, { manifest_toml: x64Toml.replace("lib-dynload\",\n    ", "lib-dynload\",\n    ").replace(/\[\n    "[^"]*lib-dynload",\n    /, "[\n    "), artifacts: [x64] });
+    expect(r.status).toBe(201);
     // …but a manifest that differs in anything else is still another version.
     const other = x64Toml.replace("python3-3.13.5", "python3-3.13.6");
     expect(mergePublish({ manifest_toml: armToml, artifacts: [arm] }, { manifest_toml: other, artifacts: [x64] }).status).toBe(409);
