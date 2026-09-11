@@ -15,7 +15,7 @@ release:
 	[ -n "$$V" ] || V=$$(echo "$$CUR" | awk -F. '{print $$1"."$$2"."$$3+1}'); \
 	echo "$$V" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$' || { echo "release: bad version \`$$V\`"; exit 1; }; \
 	echo "release: $$CUR -> $$V"; \
-	sed -i "s/^version = \".*\"/version = \"$$V\"/" ply.toml; \
+	sed "s/^version = \".*\"/version = \"$$V\"/" ply.toml > ply.toml.tmp && mv ply.toml.tmp ply.toml; \
 	git add ply.toml; \
 	git commit -m "v$$V"; \
 	git push; \
