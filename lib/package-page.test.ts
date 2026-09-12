@@ -185,10 +185,10 @@ describe("runExample", () => {
 });
 
 describe("memberSnippet", () => {
-  it("builds a [[app]] block with the first default param and an overridable comment", () => {
+  it("builds a [[service]] block with the first default param and an overridable comment", () => {
     const m = manifestJson(POSTGRES_TOML);
     const snippet = memberSnippet(postgresPkg, postgresLatest, m);
-    expect(snippet).toContain("[[app]]");
+    expect(snippet).toContain("[[service]]");
     expect(snippet).toContain('params = { database = "postgres" }');
     expect(snippet).toContain("# overridable: database, user");
   });

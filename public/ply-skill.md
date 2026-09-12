@@ -176,7 +176,40 @@ sudo systemctl enable --now ply-myapp
 
 Rootless apps need a **user** unit instead — `ply systemd --user` — plus
 `sudo loginctl enable-linger $USER`, or everything stops at logout and
-nothing starts at boot.
+nothing starts at boot. The unit runs a `current.img` link beside the
+image, which every `ply deploy` re-points, so a restart or a reboot comes
+back on the deployed version.
+
+## Secrets and backups
+
+Never write a password into a manifest or a deployment file in the clear.
+Seal it for the host instead: `sudo ply secret hostkey` on the server
+prints its key; `ply secret seal DATABASE_URL=… --for <key>` anywhere
+prints `DATABASE_URL = "enc:v1:…"`, which goes in `[env]` (manifest,
+deployment file, or stack member) and can be committed. It opens only on
+that host, at launch, in the run parent; the log names the variable, never
+the value. Or keep a root-only `--env-file`.
+
+Any app with `[volumes]` is backed up with `ply snapshot take APP`: its
+volumes become one dated image in the store, taken with the app held still
+so a database comes out consistent; `ply snapshot ls APP` lists them and
+`ply restore APP [NAME]` rolls one back in (the previous volume is kept
+under `.pre-restore/`). Nothing in the image has to cooperate. The
+registry's Postgres can also dump itself to an rclone target on a
+schedule (`BACKUP_DEST`, `RCLONE_S3_*` sealed, the destination allowed in
+its egress); `ply backup now|ls db` and `ply backup restore db --to check
+| --replace` drive that.
+
+## Notifications
+
+`/var/lib/ply/notify.toml` with `on = ["deploy-failed", "restart-loop",
+"snapshot-failed", "disk-high"]` and `to = ["telegram:<token>:<chat>"]`
+(or `discord:`, a bare `https://` webhook, or `command:<prog>` for email
+via `mail`). The reconcile beat delivers new events each minute — no
+daemon. `restart-loop` (3 crashes in 5 min) and `disk-high` (>90% full)
+are computed and rate-limited. Seal a destination (`ply secret seal
+notify=… --for <key>`) to keep the token out of a public fleet repo.
+`ply notify --test` proves it.
 
 ## Using Docker images
 
@@ -310,6 +343,12 @@ ply run IMAGE [--scale N]
 ply ps [--json]
 ply stats [APP|APP.N] [--json]
 ply exec APP[.N] CMD...
+ply snapshot take|ls|rm APP        # volumes → a dated image, app held still for the copy
+ply restore APP [NAME|latest]      # roll the slot back onto a snapshot (previous volume kept)
+ply backup now|ls APP              # a service's own dump contract (postgres): dump now / list
+ply backup restore APP [NAME|latest] --to DB | --replace
+ply secret hostkey                 # this host's sealing key; sudo for root's
+ply secret seal KEY=VALUE... [--for HOSTKEY] [--env]   # KEY = "enc:v1:…" for [env]
 ply egress APP [--follow] [--blocked] [--json]          # the outbound audit log as a table
 ply why APP [--json]                                    # exits, blocked traffic, changes — with evidence
 ```
@@ -522,6 +561,9 @@ quoted (`"boost1.84" = "1.84"`).
 
 ## [env]
 
+A value `enc:v1:…` is sealed (`ply secret seal`): ciphertext in the file,
+opened by the run parent on the one host it was sealed for.
+
 Composed after package contributions, before `-e` / `--env-file`. Last wins.
 
 ## [ports]
@@ -664,7 +706,7 @@ Rollback = pin the spec: `version = "1.4.2"` (registry/github lanes) or
 
 ## Cautions
 
-- Secrets never go in the spec if avoidable: use `env_file = "/root/x.env"`
+- Secrets go in the spec only sealed (`KEY = "enc:v1:…"` from `ply secret seal … --for <host key>`, which opens only on that host at launch), or in an `env_file = "/root/x.env"`
   or `token_file = ".keys/<name>.token"` (relative = under the
   deployments dir; you create the key file, 0600).
 - One deployment per app name — two specs resolving to the same inner app

@@ -1,6 +1,6 @@
 // The package page's manifest-derived UI: real `ply run`/`ply up` examples
 // (with the `-e` flags a standalone run needs for secret-backed env), the
-// `[[app]]` member snippet a consumer can paste into their own stack, the
+// `[[service]]` member snippet a consumer can paste into their own stack, the
 // `{member.param}` references they can write, and a stack's member table.
 // Pure and hand-testable — the page supplies `pkg`/`latest` from state.json
 // and `manifest` from `manifestSource()` + `parseManifest()`.
@@ -84,7 +84,7 @@ export function memberSnippet(pkg: RegistryPackage, latest: RegistryVersion, man
   if (!manifest || pkg.type !== "app") return "";
   const rows = paramRows(latest.params);
   const overridable = rows.filter((r) => r.kind === "default");
-  const lines = [`[[app]]`, `run = "${ref(pkg, latest.version)}"`, `name = "${pkg.name}"`];
+  const lines = [`[[service]]`, `run = "${ref(pkg, latest.version)}"`, `name = "${pkg.name}"`];
   if (overridable.length > 0) {
     lines.push(`params = { ${overridable[0].name} = "${escapeTomlString(overridable[0].value ?? "")}" }`);
     lines.push(`# overridable: ${overridable.map((r) => r.name).join(", ")}`);
